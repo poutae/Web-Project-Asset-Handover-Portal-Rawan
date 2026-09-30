@@ -174,7 +174,10 @@ test.describe('two tabs, one session', () => {
     await saveTitle(tabB, 'Launch plan (B2)')
     await expect(tabB.getByRole('dialog', { name: 'Edit conflict' })).toBeVisible()
     await tabB.getByRole('button', { name: 'Keep my change' }).click()
+    // The re-sent change must be accepted, not rejected with another conflict.
+    await expect(tabB.getByRole('dialog', { name: 'Edit conflict' })).toBeHidden()
     await expectPending(tabB, 0)
+    await expect(tabB.getByTestId('sync-badge')).toHaveCount(0)
 
     await expect(tabA.getByText('Launch plan (B2)')).toBeVisible()
     const after = (await (

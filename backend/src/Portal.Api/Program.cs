@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.HttpOverrides;
@@ -45,6 +46,11 @@ builder.Services.AddDbContext<PortalDbContext>((serviceProvider, options) =>
             "ConnectionStrings:Default is not configured. Set the ConnectionStrings__Default environment variable (see .env.example).");
     options.UseSqlServer(connectionString);
 });
+
+// Enums travel as their names ("Admin", "Internal") in both directions, which is what the frontend uses;
+// numbers are still accepted on input.
+builder.Services.ConfigureHttpJsonOptions(options =>
+    options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<PortalExceptionHandler>();
