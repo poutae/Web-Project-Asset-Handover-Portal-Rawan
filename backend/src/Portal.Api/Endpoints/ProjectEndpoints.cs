@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Portal.Api.Concurrency;
 using Portal.Api.Contracts;
 using Portal.Api.Projects;
+using Portal.Api.Realtime;
 using Portal.Api.Security;
 using Portal.Domain;
 using Portal.Infrastructure.Persistence;
@@ -64,7 +65,13 @@ public static class ProjectEndpoints
     }
 
     private static async Task<IResult> CreateProject(
-        CreateProjectRequest request, PortalDbContext db, CurrentUser user, TimeProvider clock, HttpResponse response, CancellationToken ct)
+        CreateProjectRequest request,
+        PortalDbContext db,
+        CurrentUser user,
+        IRealtimePublisher realtime,
+        TimeProvider clock,
+        HttpResponse response,
+        CancellationToken ct)
     {
         var errors = new ValidationErrors();
         var name = errors.Required("name", request.Name, 200);
@@ -90,6 +97,7 @@ public static class ProjectEndpoints
             AddedAt = now,
         });
         await db.SaveChangesAsync(ct);
+        await realtime.PublishAsync(RealtimeKinds.Project, RealtimeActions.Created, project.Id, project.Id, project.RowVersion, false, ct);
 
         response.Headers.ETag = OptimisticConcurrency.ToETag(project.RowVersion);
         return Results.Created($"/api/projects/{project.Id}", ToDto(project, ProjectRole.Lead));
@@ -111,6 +119,7 @@ public static class ProjectEndpoints
         UpdateProjectRequest request,
         ProjectAccess access,
         PortalDbContext db,
+        IRealtimePublisher realtime,
         HttpRequest httpRequest,
         HttpResponse response,
         CancellationToken ct)
@@ -156,7 +165,13 @@ public static class ProjectEndpoints
         project.Status = request.Status;
 
         var conflict = await OptimisticConcurrency.SaveAsync(db, project, p => ToDto(p, permissions.Role), ct);
-        return conflict ?? WithETag(response, project.RowVersion, Results.Ok, ToDto(project, permissions.Role));
+        if (conflict is not null)
+        {
+            return conflict;
+        }
+
+        await realtime.PublishAsync(RealtimeKinds.Project, RealtimeActions.Updated, project.Id, project.Id, project.RowVersion, false, ct);
+        return WithETag(response, project.RowVersion, Results.Ok, ToDto(project, permissions.Role));
     }
 
     private static async Task<IResult> ListMembers(Guid projectId, ProjectAccess access, PortalDbContext db, CancellationToken ct)
@@ -183,6 +198,7 @@ public static class ProjectEndpoints
         ProjectAccess access,
         PortalDbContext db,
         ITenantContext tenant,
+        IRealtimePublisher realtime,
         TimeProvider clock,
         CancellationToken ct)
     {
@@ -226,6 +242,7 @@ public static class ProjectEndpoints
         var member = new ProjectMember { ProjectId = projectId, UserId = target.Id, Role = request.Role, AddedAt = clock.GetUtcNow() };
         db.ProjectMembers.Add(member);
         await db.SaveChangesAsync(ct);
+        await realtime.PublishAsync(RealtimeKinds.Member, RealtimeActions.Created, projectId, target.Id, member.RowVersion, false, ct);
 
         return Results.Created($"/api/projects/{projectId}/members/{target.Id}", ToMemberDto(member, target.DisplayName, target.Email!));
     }
@@ -236,6 +253,7 @@ public static class ProjectEndpoints
         UpdateProjectMemberRequest request,
         ProjectAccess access,
         PortalDbContext db,
+        IRealtimePublisher realtime,
         HttpRequest httpRequest,
         HttpResponse response,
         CancellationToken ct)
@@ -272,7 +290,13 @@ public static class ProjectEndpoints
         member.Role = request.Role;
 
         var conflict = await OptimisticConcurrency.SaveAsync(db, member, m => ToMemberDto(m, target.DisplayName, target.Email!), ct);
-        return conflict ?? WithETag(response, member.RowVersion, Results.Ok, ToMemberDto(member, target.DisplayName, target.Email!));
+        if (conflict is not null)
+        {
+            return conflict;
+        }
+
+        await realtime.PublishAsync(RealtimeKinds.Member, RealtimeActions.Updated, projectId, userId, member.RowVersion, false, ct);
+        return WithETag(response, member.RowVersion, Results.Ok, ToMemberDto(member, target.DisplayName, target.Email!));
     }
 
     private static async Task<IResult> RemoveMember(
@@ -280,6 +304,7 @@ public static class ProjectEndpoints
         Guid userId,
         ProjectAccess access,
         PortalDbContext db,
+        IRealtimePublisher realtime,
         HttpRequest httpRequest,
         CancellationToken ct)
     {
@@ -310,7 +335,14 @@ public static class ProjectEndpoints
 
         var target = await db.Users.SingleAsync(u => u.Id == userId, ct);
         var conflict = await OptimisticConcurrency.SaveAsync(db, member, m => ToMemberDto(m, target.DisplayName, target.Email!), ct);
-        return conflict ?? Results.NoContent();
+        if (conflict is not null)
+        {
+            return conflict;
+        }
+
+        // The removed user is no longer a member, so notify them explicitly to drop the project.
+        await realtime.PublishAsync(RealtimeKinds.Member, RealtimeActions.Deleted, projectId, userId, null, false, ct, [userId]);
+        return Results.NoContent();
     }
 
     private static ProjectMemberDto ToMemberDto(ProjectMember member, string displayName, string email) => new(
