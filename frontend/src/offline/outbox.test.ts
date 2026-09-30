@@ -222,6 +222,61 @@ describe('Outbox', () => {
     expect(await outbox.list()).toEqual([])
   })
 
+  it('gives a re-queued entry a new idempotency key, so the server does not replay the old outcome', async () => {
+    const ids: string[] = []
+    let first = true
+    const outbox = makeOutbox({
+      tab: 'A',
+      send: async (e) => {
+        ids.push(e.id)
+        const result: SendResult = first
+          ? { kind: 'conflict', current: { version: 'v2' } }
+          : { kind: 'ok' }
+        first = false
+        return result
+      },
+    })
+    await outbox.enqueue({
+      method: 'PUT',
+      url: '/x',
+      body: {},
+      version: 'v1',
+      resourceKey: 'r',
+      label: 'edit',
+      invalidate: [],
+    })
+    await outbox.process()
+    const [conflicted] = await outbox.list()
+
+    await outbox.keepMine(conflicted!)
+    await outbox.process()
+
+    expect(ids).toHaveLength(2)
+    expect(ids[1]).not.toBe(ids[0])
+  })
+
+  it('gives a retried failed entry a new idempotency key too', async () => {
+    const ids: string[] = []
+    let refuse = true
+    const outbox = makeOutbox({
+      tab: 'A',
+      send: async (e) => {
+        ids.push(e.id)
+        return refuse ? { kind: 'rejected', message: 'nope' } : { kind: 'ok' }
+      },
+    })
+    await outbox.enqueue(note('x'))
+    await outbox.process()
+    const [failed] = await outbox.list()
+
+    refuse = false
+    await outbox.retry(failed!.seq!)
+    await outbox.process()
+
+    expect(ids[1]).not.toBe(ids[0])
+    expect(await outbox.list()).toEqual([])
+  })
+
   it('marks refused changes as failed without blocking unrelated ones', async () => {
     const outbox = makeOutbox({
       tab: 'A',

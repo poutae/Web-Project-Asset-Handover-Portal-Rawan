@@ -142,30 +142,16 @@ public sealed class IdempotencyMiddleware(RequestDelegate next)
     private static async Task<(Guid? RecordId, IdempotencyRecord? Existing)> TryClaimAsync(
         IServiceScopeFactory scopeFactory, Guid userId, string key, byte[] hash, DateTimeOffset now, CancellationToken ct)
     {
-        for (var attempt = 0; attempt < 2; attempt++)
+        for (var attempt = 0; attempt < 3; attempt++)
         {
-            await using (var scope = scopeFactory.CreateAsyncScope())
+            await using var scope = scopeFactory.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+
+            // Look first: a plain retry finds its record here and never has to trip the unique index.
+            var existing = await db.IdempotencyRecords.AsNoTracking()
+                .SingleOrDefaultAsync(r => r.UserId == userId && r.Key == key, ct);
+            if (existing is not null)
             {
-                var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
-                var record = new IdempotencyRecord { UserId = userId, Key = key, RequestHash = hash, CreatedAt = now };
-                db.IdempotencyRecords.Add(record);
-                try
-                {
-                    await db.SaveChangesAsync(ct);
-                    return (record.Id, null);
-                }
-                catch (DbUpdateException)
-                {
-                    db.ChangeTracker.Clear();
-                }
-
-                var existing = await db.IdempotencyRecords.AsNoTracking()
-                    .SingleOrDefaultAsync(r => r.UserId == userId && r.Key == key, ct);
-                if (existing is null)
-                {
-                    continue; // the row vanished between the insert and the lookup; try again
-                }
-
                 if (existing.StatusCode is null && now - existing.CreatedAt > StaleInProgress)
                 {
                     // The first attempt died without finishing. Clear it so this request can run.
@@ -174,6 +160,18 @@ public sealed class IdempotencyMiddleware(RequestDelegate next)
                 }
 
                 return (null, existing);
+            }
+
+            var record = new IdempotencyRecord { UserId = userId, Key = key, RequestHash = hash, CreatedAt = now };
+            db.IdempotencyRecords.Add(record);
+            try
+            {
+                await db.SaveChangesAsync(ct);
+                return (record.Id, null);
+            }
+            catch (DbUpdateException)
+            {
+                // Two requests with the same key raced; the loser looks the winner's record up next round.
             }
         }
 
