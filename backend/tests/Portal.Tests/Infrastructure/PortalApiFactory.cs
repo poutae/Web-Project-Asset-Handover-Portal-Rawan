@@ -28,6 +28,8 @@ public sealed class PortalApiFactory : WebApplicationFactory<Program>
         builder.UseSetting("ConnectionStrings:Default", DatabaseConnection);
         builder.UseSetting("Database:MigrateOnStartup", "true");
         builder.UseSetting("RateLimit:AuthPerMinute", "100000");
+        builder.UseSetting("Logging:LogLevel:Default", "Warning");
+        builder.UseSetting("Logging:LogLevel:Microsoft.EntityFrameworkCore", "Warning");
     }
 
     public override async ValueTask DisposeAsync()

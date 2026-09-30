@@ -34,7 +34,11 @@ builder.Services.AddExceptionHandler<PortalExceptionHandler>();
 builder.Services.AddIdentityCore<AppUser>(options =>
     {
         options.User.RequireUniqueEmail = true;
+        // Length-based policy (NIST SP 800-63B): long passphrases, no arbitrary composition rules.
         options.Password.RequiredLength = 12;
+        options.Password.RequireDigit = false;
+        options.Password.RequireLowercase = false;
+        options.Password.RequireUppercase = false;
         options.Password.RequireNonAlphanumeric = false;
         options.Lockout.MaxFailedAccessAttempts = 5;
         options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
