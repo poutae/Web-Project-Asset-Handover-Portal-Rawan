@@ -75,15 +75,24 @@ export class Outbox {
     this.deps.onChange?.()
   }
 
-  /** Puts a failed entry back in the queue as it was. */
+  /**
+   * Puts a failed entry back in the queue. It gets a fresh idempotency key: the server remembers the
+   * outcome of the old key and would replay the same refusal instead of trying again.
+   */
   async retry(seq: number): Promise<void> {
-    await this.deps.storage.update(seq, { status: 'pending', error: undefined })
+    await this.deps.storage.update(seq, {
+      status: 'pending',
+      error: undefined,
+      id: crypto.randomUUID(),
+    })
     this.deps.onChange?.()
   }
 
   /**
    * "Keep my change": re-queue a conflicted entry against the server's current version, so it now
-   * deliberately replaces what the other person wrote.
+   * deliberately replaces what the other person wrote. It is a different request from the one that
+   * conflicted (new <c>If-Match</c>), so it gets a fresh idempotency key; reusing the old one would make
+   * the server replay the stored 409.
    */
   async keepMine(entry: OutboxEntry): Promise<void> {
     const currentVersion = (entry.conflictCurrent as { version?: string } | undefined)?.version
@@ -92,6 +101,7 @@ export class Outbox {
       version: currentVersion ?? entry.version,
       conflictCurrent: undefined,
       error: undefined,
+      id: crypto.randomUUID(),
     })
     this.deps.onChange?.()
   }
