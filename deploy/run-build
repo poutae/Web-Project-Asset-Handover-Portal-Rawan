@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+# Runs ONE build step (a git command or the project's build command) as an unprivileged build user inside a
+# systemd transient unit with resource limits. The portal calls this through sudo; nothing else is allowed.
+#
+#   run-build --workdir DIR --cwd DIR --timeout SECONDS (--shell 'CMD' | --exec PROGRAM -- ARGS...)
+#
+# Install: see deploy/README.md. Must be owned by root and not writable by anyone else.
+set -euo pipefail
+
+CONFIG=/etc/portal/build-sandbox.conf
+# shellcheck disable=SC1090
+[ -r "$CONFIG" ] && . "$CONFIG"
+
+BUILD_USER="${BUILD_USER:-portal-build}"
+BUILD_GROUP="${BUILD_GROUP:-portal-build}"
+PORTAL_GROUP="${PORTAL_GROUP:-portal}"
+BUILDS_ROOT="${BUILDS_ROOT:-/var/lib/portal/deployments/work}"
+MEMORY_MAX="${MEMORY_MAX:-2G}"
+CPU_QUOTA="${CPU_QUOTA:-200%}"
+TASKS_MAX="${TASKS_MAX:-512}"
+# DNS resolver(s) the build may reach even though loopback/private ranges are otherwise blocked.
+DNS_ALLOW="${DNS_ALLOW:-127.0.0.53}"
+
+die() { echo "run-build: $*" >&2; exit 64; }
+
+workdir="" cwd="" timeout="" mode="" shell_cmd="" exec_prog=""
+exec_args=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --workdir) workdir="$2"; shift 2 ;;
+    --cwd) cwd="$2"; shift 2 ;;
+    --timeout) timeout="$2"; shift 2 ;;
+    --shell) mode=shell; shell_cmd="$2"; shift 2 ;;
+    --exec) mode=exec; exec_prog="$2"; shift 2 ;;
+    --) shift; exec_args=("$@"); break ;;
+    *) die "unexpected argument: $1" ;;
+  esac
+done
+
+[ -n "$workdir" ] && [ -n "$cwd" ] && [ -n "$timeout" ] && [ -n "$mode" ] || die "missing arguments"
+[[ "$timeout" =~ ^[0-9]{1,5}$ ]] || die "invalid timeout"
+
+# The workspace must be a real directory directly inside the builds root (no symlinks, no traversal).
+root_real="$(realpath -e "$BUILDS_ROOT")"
+work_real="$(realpath -e "$workdir")" || die "workdir does not exist"
+[ "$(dirname "$work_real")" = "$root_real" ] || die "workdir must be directly inside $root_real"
+[ ! -L "$workdir" ] || die "workdir must not be a symlink"
+cwd_real="$(realpath -e "$cwd")" || die "cwd does not exist"
+case "$cwd_real" in "$work_real"|"$work_real"/*) ;; *) die "cwd must be inside the workdir" ;; esac
+
+if [ "$mode" = exec ]; then
+  # The portal only ever asks for git; refuse anything else so this helper cannot be used as a general launcher.
+  [ "$exec_prog" = git ] || die "only git may be executed directly"
+fi
+
+# Only these variables are passed to the build (the portal forwards them through sudo --preserve-env).
+setenv=()
+for name in CI HOME TMPDIR GIT_TERMINAL_PROMPT GIT_CONFIG_NOSYSTEM GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_CONFIG_VALUE_0 \
+            GIT_CONFIG_KEY_1 GIT_CONFIG_VALUE_1 npm_config_cache npm_config_update_notifier; do
+  if [ -n "${!name+x}" ]; then setenv+=("--setenv=$name=${!name}"); fi
+done
+setenv+=("--setenv=PATH=/usr/local/bin:/usr/bin:/bin")
+
+# Hand the workspace to the build user for the duration of the step.
+chown -R "$BUILD_USER:$BUILD_GROUP" "$work_real"
+chmod 0750 "$work_real"
+
+cmd=("git")
+[ "$mode" = shell ] && cmd=("/bin/sh" "-c" "$shell_cmd")
+[ "$mode" = exec ] && cmd=("$exec_prog" "${exec_args[@]}")
+
+status=0
+systemd-run --quiet --wait --collect --pipe \
+  --uid="$BUILD_USER" --gid="$BUILD_GROUP" \
+  --working-directory="$cwd_real" \
+  -p MemoryMax="$MEMORY_MAX" -p MemorySwapMax=0 -p CPUQuota="$CPU_QUOTA" -p TasksMax="$TASKS_MAX" \
+  -p RuntimeMaxSec="$timeout" \
+  -p PrivateTmp=yes -p PrivateDevices=yes -p NoNewPrivileges=yes \
+  -p ProtectSystem=strict -p ProtectHome=yes -p ReadWritePaths="$work_real" \
+  -p ProtectKernelTunables=yes -p ProtectKernelModules=yes -p ProtectControlGroups=yes -p ProtectClock=yes \
+  -p RestrictSUIDSGID=yes -p RestrictNamespaces=yes -p LockPersonality=yes \
+  -p RestrictAddressFamilies="AF_INET AF_INET6 AF_UNIX" \
+  -p CapabilityBoundingSet= -p SystemCallArchitectures=native \
+  -p IPAddressAllow="$DNS_ALLOW" \
+  -p IPAddressDeny="127.0.0.0/8 ::1/128 169.254.0.0/16 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 100.64.0.0/10 fc00::/7 fe80::/10" \
+  "${setenv[@]}" \
+  -- "${cmd[@]}" || status=$?
+
+# Symlinks in build output could point anywhere; remove them before the portal reads the tree.
+find "$work_real" -type l -delete 2>/dev/null || true
+# Give the portal's group read access to the results, and take the workspace away from the build user.
+chgrp -R "$PORTAL_GROUP" "$work_real"
+chmod -R g+rX,o-rwx "$work_real"
+chown -R "root:$PORTAL_GROUP" "$work_real" 2>/dev/null || true
+
+exit "$status"

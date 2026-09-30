@@ -14,7 +14,7 @@ public sealed class SystemdRunSandbox(string helperPath) : IBuildSandbox
     /// <summary>The only environment variables that are passed through to the build.</summary>
     public static readonly IReadOnlyCollection<string> ForwardedVariables =
     [
-        "CI", "HOME", "TMPDIR", "GIT_TERMINAL_PROMPT", "GIT_CONFIG_COUNT", "GIT_CONFIG_KEY_0", "GIT_CONFIG_VALUE_0",
+        "CI", "HOME", "TMPDIR", "GIT_TERMINAL_PROMPT", "GIT_CONFIG_NOSYSTEM", "GIT_CONFIG_COUNT", "GIT_CONFIG_KEY_0", "GIT_CONFIG_VALUE_0",
         "GIT_CONFIG_KEY_1", "GIT_CONFIG_VALUE_1", "npm_config_cache", "npm_config_update_notifier",
     ];
 
@@ -22,6 +22,9 @@ public sealed class SystemdRunSandbox(string helperPath) : IBuildSandbox
 
     public Task<SandboxResult> RunAsync(SandboxCommand command, Action<string, bool> output, CancellationToken ct)
     {
+        // The build user needs a home directory to write to; it lives inside the workspace it may modify.
+        Directory.CreateDirectory(Path.Combine(command.WorkingDirectory, ".home"));
+
         var environment = new Dictionary<string, string>(command.Environment)
         {
             ["CI"] = "true",

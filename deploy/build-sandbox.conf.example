@@ -1,0 +1,10 @@
+# /etc/portal/build-sandbox.conf  (optional overrides for run-build)
+BUILD_USER=portal-build
+BUILD_GROUP=portal-build
+PORTAL_GROUP=portal
+BUILDS_ROOT=/var/lib/portal/deployments/work
+MEMORY_MAX=2G
+CPU_QUOTA=200%
+TASKS_MAX=512
+# Resolver the build may talk to although loopback/private ranges are blocked (systemd-resolved stub).
+DNS_ALLOW=127.0.0.53
