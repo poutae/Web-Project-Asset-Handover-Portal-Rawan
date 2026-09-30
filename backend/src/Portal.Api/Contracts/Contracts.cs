@@ -43,3 +43,28 @@ public sealed record ProjectMemberDto(Guid UserId, string DisplayName, string Em
 public sealed record AddProjectMemberRequest(Guid UserId, ProjectRole Role);
 
 public sealed record UpdateProjectMemberRequest(ProjectRole Role);
+
+public sealed record MilestoneDto(
+    Guid Id,
+    Guid ProjectId,
+    string Title,
+    string Description,
+    DateOnly? DueDate,
+    MilestoneStatus Status,
+    DateTimeOffset CreatedAt,
+    string Version);
+
+public sealed record SaveMilestoneRequest(string? Title, string? Description, DateOnly? DueDate, MilestoneStatus Status);
+
+public sealed record NoteDto(
+    Guid Id,
+    Guid ProjectId,
+    Guid AuthorUserId,
+    string AuthorName,
+    string Body,
+    NoteVisibility Visibility,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt,
+    string Version);
+
+public sealed record SaveNoteRequest(string? Body, NoteVisibility Visibility);

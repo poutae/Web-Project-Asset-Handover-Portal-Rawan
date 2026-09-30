@@ -131,6 +131,8 @@ app.MapGet("/api/health/ready", async (PortalDbContext db, CancellationToken ct)
 app.MapAuthEndpoints();
 app.MapOrganizationEndpoints();
 app.MapProjectEndpoints();
+app.MapMilestoneEndpoints();
+app.MapNoteEndpoints();
 
 app.Run();
 
