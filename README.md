@@ -18,15 +18,47 @@ scripts/    PowerShell scripts for Windows development
 .github/    CI workflows
 ```
 
+## What it does
+
+- **Organizations and users** with cookie sign-in, roles (admin, member, client), and invitations.
+- **Projects** with members and per-project roles; **milestones**, **notes** (internal or client-visible), and **documents/assets** (validated uploads, authorized downloads).
+- **Realtime sync** between tabs and users (SignalR), an **offline change queue** (IndexedDB) that survives refreshes and keeps its order, and a **conflict dialog** when two people edit the same thing.
+- **Deploy on Our Platform:** connect a Git repository to a project environment and deploy it as a live static site, with status, logs, health checks, redeploy, and rollback.
+
+Tenant isolation and authorization are enforced on the server for every request; the UI only reflects them.
+
+## How it fits together
+
+| Concern | How |
+|---|---|
+| Tenancy | Every tenant-owned row has an `OrganizationId`; an EF Core global query filter and a `SaveChanges` guard reject anything outside the caller's organization. The tenant comes only from the server-issued auth cookie. |
+| Concurrency | Every entity has a SQL Server `rowversion`, sent as `ETag` and required back in `If-Match`. A stale version is `409 Conflict` with the current state; a missing one is `428`. There is no last-write-wins. |
+| Idempotency | Mutations carry an `Idempotency-Key`. A retry replays the stored response instead of running twice. |
+| Realtime | After each change the server pushes a content-free event to exactly the people who may see the project; clients re-fetch through the normal authorized API. |
+| Offline | Every UI change is written to an ordered IndexedDB outbox first. Each tab owns its own entries; a surviving tab adopts a closed tab's (Web Locks). |
+| Files | `IFileStorage` (local disk). Random keys, extension allow-list plus content check, size limit enforced while streaming, downloads as sandboxed attachments. |
+| Deployments | SQL-backed job queue + hosted worker. `IDeploymentProvider` (platform static-site provider) builds in an isolated sandbox, stores immutable releases, switches them atomically, and only reports success after a real HTTP health check. |
+
 ## Local development (Windows)
 
-Prerequisites: .NET 10 SDK, Node.js 22+, and SQL Server running on `localhost`.
+Prerequisites: .NET 10 SDK, Node.js 22+, git, and SQL Server running on `localhost`.
 
 ```powershell
 ./scripts/setup.ps1     # checks prerequisites, creates .env, restores packages
 ./scripts/dev.ps1       # starts the API (http://localhost:5080) and Vite (http://localhost:5173)
 ./scripts/verify.ps1    # runs every check that CI runs
+./scripts/e2e.ps1       # builds, then runs the Playwright tests (e2e/two-tab.spec.ts) against a fresh database
+./scripts/publish.ps1   # builds a deployable folder for your server
+./scripts/migrate.ps1   # applies database migrations (production never migrates automatically)
 ```
+
+Running on your own server: see [`deploy/README.md`](deploy/README.md).
+
+### Tests
+
+- `dotnet test` (xUnit): unit tests run anywhere; integration tests (`Category=Integration`) need SQL Server and read `PORTAL_TEST_CONNECTION` (a connection string without a database name; each test class gets its own database). Deployment tests run real `git` and `node` builds.
+- `npm test` in `frontend/` (Vitest): outbox, HTTP layer, and overlay logic.
+- `e2e/two-tab.spec.ts` (Playwright): realtime between two tabs in under a second, offline changes surviving refresh and reconnect in order, concurrent edits producing a conflict dialog, and per-tab outbox isolation. It runs against the production build on a real database, in CI and via `scripts/e2e.ps1`.
 
 ## Workflow
 
@@ -55,4 +87,16 @@ Decisions made by the project owner.
 | 2026-09-30 | Database | **SQL Server on `localhost`** for development. Tests use a real SQL Server instance (no in-memory substitutes for isolation and concurrency tests). |
 | 2026-09-30 | Deployment isolation | **Same host, restricted OS user plus cgroup limits** for client builds, behind an `IDeploymentProvider` abstraction. Only suitable for client projects the operator trusts. |
 | 2026-09-30 | Hosting | Linux host is assumed (cgroups). Exact reverse proxy and process manager are still to be decided. |
+| 2026-09-30 | Deployments: scope | **Static sites only** in the first version (a build that produces a folder with `index.html`). No long-running server apps yet. |
+| 2026-09-30 | Deployments: source | **Git repository URL** (https, public host) with an optional read-only access token stored encrypted and never logged. Branch, tag, or commit can be deployed; a redeploy rebuilds the exact commit; a rollback re-activates a stored build. |
+| 2026-09-30 | Deployments: serving | **The portal serves sites by hostname** (`{label}.{Deploy:BaseDomain}`), straight from the live release folder, before any portal code runs. Needs a wildcard DNS record (and wildcard TLS at your proxy). |
+| 2026-09-30 | Deployments: isolation | **`sudo` helper + `systemd-run`**: the portal is unprivileged and may run one fixed helper that starts each build step as a separate low-privilege user with CPU/memory/task/time limits, a read-only filesystem apart from its workspace, and no route to loopback/private networks. Builds get outbound internet. Not exercised in CI (Windows); see `deploy/README.md`. |
 | 2026-09-30 | Product | Roles: agency admin, agency member, client. First milestone is a vertical slice (auth, organizations, projects, notes) with realtime, offline queue, and conflict handling. |
+
+## Known limitations and open decisions
+
+- **Email:** invitations return a one-time link to the admin; nothing is emailed (needs an external service, your decision).
+- **Malware scanning** of uploaded files is not done (needs an external scanner).
+- **Uploads and deployments are online-only** by design; all other edits work offline.
+- **Cleanup jobs:** old idempotency records and orphaned upload files are not yet swept.
+- **The systemd build sandbox** has not been run in CI. **The Linux server assumption** (cgroups, systemd) is only needed for "Deploy on Our Platform"; the rest of the portal is OS-independent.
