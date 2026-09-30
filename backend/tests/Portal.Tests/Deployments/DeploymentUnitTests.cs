@@ -28,6 +28,10 @@ public sealed class DeploymentUnitTests
     [InlineData("https://intranet/repo.git")]
     [InlineData("https://build.internal/repo.git")]
     [InlineData("https://printer.local/repo.git")]
+    [InlineData("https://127.0.0.1/repo.git")]
+    [InlineData("https://169.254.169.254/latest")]
+    [InlineData("https://10.0.0.5/repo.git")]
+    [InlineData("https://[::1]/repo.git")]
     [InlineData("https://github.com/org/repo with space.git")]
     public void Anything_else_is_refused(string url) =>
         Assert.NotNull(RepositoryUrlPolicy.ValidateSyntax(url, allowLocal: false));

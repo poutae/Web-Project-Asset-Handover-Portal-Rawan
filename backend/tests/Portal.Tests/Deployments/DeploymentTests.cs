@@ -190,11 +190,15 @@ public sealed class DeploymentTests(PortalApiFactory factory) : IClassFixture<Po
         var first = await WaitForAsync(lead, project, environment, (await StartAsync(lead, project, environment)).Id, Finished);
         Assert.Equal(DeploymentStatus.Succeeded, first.Status);
 
+        // The first deployment changed the environment (it is now live), so edit from its current version.
+        using var current = await lead.GetAsync(EnvUrl(project));
+        var currentVersion = (await ApiClient.ReadAsync<List<EnvironmentDto>>(current)).Single().Version;
+
         // From now on the site must answer /health, which the next build does not provide.
         using var update = await lead.PutAsync(
             $"{EnvUrl(project)}/{environment.Id}",
             new { name = environment.Name, repositoryUrl = repo.Url, branch = "main", buildCommand = GitRepo.BuildCommand, outputDirectory = "dist", healthPath = "/health", spaFallback = false },
-            environment.Version);
+            currentVersion);
         Assert.Equal(HttpStatusCode.OK, update.StatusCode);
         repo.Commit("broken-release");
 

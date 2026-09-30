@@ -116,7 +116,8 @@ public sealed class DeploymentLogSink : IDeploymentLog, IAsyncDisposable
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             // Losing log lines must never fail a deployment.
-            _scopes.CreateScope().ServiceProvider.GetService<ILogger<DeploymentLogSink>>()
+            using var scope = _scopes.CreateScope();
+            scope.ServiceProvider.GetService<ILogger<DeploymentLogSink>>()
                 ?.LogWarning(ex, "Could not store {Count} log lines for deployment {DeploymentId}", batch.Count, _deploymentId);
         }
     }

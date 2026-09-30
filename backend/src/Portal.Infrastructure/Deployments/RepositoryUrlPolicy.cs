@@ -77,6 +77,11 @@ public static class RepositoryUrlPolicy
         }
 
         var host = uri.DnsSafeHost.ToLowerInvariant();
+        if (IPAddress.TryParse(host.Trim('[', ']'), out var literal) && !IsPublic(literal))
+        {
+            return "That address is not reachable from the build service.";
+        }
+
         if (host is "localhost" || host.EndsWith(".localhost", StringComparison.Ordinal)
             || host.EndsWith(".local", StringComparison.Ordinal) || host.EndsWith(".internal", StringComparison.Ordinal)
             || !host.Contains('.', StringComparison.Ordinal) && !IPAddress.TryParse(host.Trim('[', ']'), out _))
