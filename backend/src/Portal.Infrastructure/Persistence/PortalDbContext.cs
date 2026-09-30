@@ -21,6 +21,10 @@ public sealed class PortalDbContext(DbContextOptions<PortalDbContext> options, I
 
     public DbSet<ProjectMember> ProjectMembers => Set<ProjectMember>();
 
+    public DbSet<Milestone> Milestones => Set<Milestone>();
+
+    public DbSet<Note> Notes => Set<Note>();
+
     public DbSet<IdempotencyRecord> IdempotencyRecords => Set<IdempotencyRecord>();
 
     /// <summary>Read by the global query filters; EF re-evaluates it per context instance.</summary>
@@ -68,6 +72,22 @@ public sealed class PortalDbContext(DbContextOptions<PortalDbContext> options, I
             e.HasIndex(m => m.UserId);
             e.HasOne<Project>().WithMany().HasForeignKey(m => m.ProjectId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne<AppUser>().WithMany().HasForeignKey(m => m.UserId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<Milestone>(e =>
+        {
+            e.Property(m => m.Title).HasMaxLength(200);
+            e.Property(m => m.Description).HasMaxLength(4000);
+            e.HasIndex(m => new { m.ProjectId, m.DueDate });
+            e.HasOne<Project>().WithMany().HasForeignKey(m => m.ProjectId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<Note>(e =>
+        {
+            e.Property(n => n.Body).HasMaxLength(10000);
+            e.HasIndex(n => new { n.ProjectId, n.CreatedAt });
+            e.HasOne<Project>().WithMany().HasForeignKey(n => n.ProjectId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<AppUser>().WithMany().HasForeignKey(n => n.AuthorUserId).OnDelete(DeleteBehavior.Restrict);
         });
 
         builder.Entity<IdempotencyRecord>(e =>
