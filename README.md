@@ -38,6 +38,7 @@ Tenant isolation and authorization are enforced on the server for every request;
 | Offline | Every UI change is written to an ordered IndexedDB outbox first. Each tab owns its own entries; a surviving tab adopts a closed tab's (Web Locks). |
 | Files | `IFileStorage` (local disk). Random keys, extension allow-list plus content check, size limit enforced while streaming, downloads as sandboxed attachments. |
 | Deployments | SQL-backed job queue + hosted worker. `IDeploymentProvider` (platform static-site provider) builds in an isolated sandbox, stores immutable releases, switches them atomically, and only reports success after a real HTTP health check. |
+| Housekeeping | A hosted worker runs every 6 hours (first pass a minute after start-up) and removes idempotency records older than 30 days, finished job-queue rows older than 30 days, stored files no document points to (only once they are 24 hours old, at most 500 per pass), and half-written uploads. Settings are under `Cleanup__*` (see below). |
 
 ## Local development (Windows)
 
@@ -59,6 +60,20 @@ Running on your own server: see [`deploy/README.md`](deploy/README.md).
 - `dotnet test` (xUnit): unit tests run anywhere; integration tests (`Category=Integration`) need SQL Server and read `PORTAL_TEST_CONNECTION` (a connection string without a database name; each test class gets its own database). Deployment tests run real `git` and `node` builds.
 - `npm test` in `frontend/` (Vitest): outbox, HTTP layer, and overlay logic.
 - `e2e/two-tab.spec.ts` (Playwright): realtime between two tabs in under a second, offline changes surviving refresh and reconnect in order, concurrent edits producing a conflict dialog, and per-tab outbox isolation. It runs against the production build on a real database, in CI and via `scripts/e2e.ps1`.
+
+### Housekeeping settings
+
+All optional (defaults shown; durations are `d.hh:mm:ss`):
+
+```text
+Cleanup__Enabled=true
+Cleanup__Interval=06:00:00
+Cleanup__InitialDelay=00:01:00
+Cleanup__IdempotencyRetention=30.00:00:00
+Cleanup__JobRetention=30.00:00:00
+Cleanup__OrphanGracePeriod=1.00:00:00     # never less than one hour
+Cleanup__MaxOrphansPerRun=500             # safety net if the app is pointed at the wrong database
+```
 
 ## Workflow
 
@@ -98,5 +113,5 @@ Decisions made by the project owner.
 - **Email:** invitations return a one-time link to the admin; nothing is emailed (needs an external service, your decision).
 - **Malware scanning** of uploaded files is not done (needs an external scanner).
 - **Uploads and deployments are online-only** by design; all other edits work offline.
-- **Cleanup jobs:** old idempotency records and orphaned upload files are not yet swept.
+- **Cleanup limits:** the idempotency retention (30 days) must be longer than a client can stay offline and still retry a queued change; if you lengthen offline use, raise `Cleanup__IdempotencyRetention`. Deployment logs and old releases are kept (no retention policy yet).
 - **The systemd build sandbox** has not been run in CI. **The Linux server assumption** (cgroups, systemd) is only needed for "Deploy on Our Platform"; the rest of the portal is OS-independent.

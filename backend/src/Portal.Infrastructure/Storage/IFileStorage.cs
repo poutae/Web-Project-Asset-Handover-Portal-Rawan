@@ -2,6 +2,9 @@ namespace Portal.Infrastructure.Storage;
 
 public sealed record StoredFile(long SizeBytes, byte[] Sha256);
 
+/// <summary>A finished file in storage, as seen by the cleanup sweeper.</summary>
+public sealed record StoredObject(string Key, DateTimeOffset LastModified);
+
 public sealed class FileTooLargeException(long maxBytes)
     : Exception($"The file is larger than the {maxBytes} byte limit.");
 
@@ -22,4 +25,13 @@ public interface IFileStorage
 
     /// <summary>Removes the file if it exists. Deleting a missing file is not an error.</summary>
     Task DeleteAsync(string key, CancellationToken ct);
+
+    /// <summary>Lists every finished file (not half-written temporary ones). Used to find orphans.</summary>
+    IAsyncEnumerable<StoredObject> ListAsync(CancellationToken ct);
+
+    /// <summary>
+    /// Removes half-written uploads last touched before <paramref name="olderThan"/> (left by a crash
+    /// mid-upload). Returns how many were removed.
+    /// </summary>
+    Task<int> DeleteAbandonedUploadsAsync(DateTimeOffset olderThan, CancellationToken ct);
 }
