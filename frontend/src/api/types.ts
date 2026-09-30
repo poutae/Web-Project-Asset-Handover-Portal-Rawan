@@ -3,6 +3,9 @@ export type ProjectRole = 'Lead' | 'Contributor' | 'Client'
 export type ProjectStatus = 'Active' | 'OnHold' | 'Completed' | 'Archived'
 export type MilestoneStatus = 'Planned' | 'InProgress' | 'Done' | 'Blocked'
 export type NoteVisibility = 'Internal' | 'Client'
+export type DeploymentStatus =
+  'Queued' | 'Building' | 'Activating' | 'HealthChecking' | 'Succeeded' | 'Failed' | 'Cancelled'
+export type DeploymentTrigger = 'Manual' | 'Redeploy' | 'Rollback'
 export type DocumentVisibility = 'Internal' | 'Client'
 export type InvitationStatus = 'Pending' | 'Accepted' | 'Revoked' | 'Expired'
 
@@ -102,11 +105,58 @@ export interface CreatedInvitation {
 }
 
 export interface RealtimeChange {
-  kind: 'project' | 'member' | 'milestone' | 'note' | 'document'
+  kind: 'project' | 'member' | 'milestone' | 'note' | 'document' | 'environment' | 'deployment'
   action: 'created' | 'updated' | 'deleted'
   projectId: string
   entityId: string
   version: string | null
   originClientId: string | null
   at: string
+}
+
+export interface DeploymentEnvironment {
+  id: string
+  name: string
+  siteLabel: string
+  url: string | null
+  repositoryUrl: string | null
+  branch: string | null
+  buildCommand: string | null
+  outputDirectory: string | null
+  healthPath: string
+  spaFallback: boolean
+  hasAccessToken: boolean
+  currentDeploymentId: string | null
+  version: string
+}
+
+export interface Deployment {
+  id: string
+  environmentId: string
+  status: DeploymentStatus
+  trigger: DeploymentTrigger
+  ref: string
+  commitSha: string | null
+  sourceDeploymentId: string | null
+  requestedByName: string
+  createdAt: string
+  startedAt: string | null
+  finishedAt: string | null
+  failureReason: string | null
+  revertedToPrevious: boolean
+  isCurrent: boolean
+  canRollback: boolean
+}
+
+export interface DeploymentLogLine {
+  id: number
+  at: string
+  channel: 'System' | 'Stdout' | 'Stderr'
+  message: string
+}
+
+export interface DeploymentLogs {
+  lines: DeploymentLogLine[]
+  next: number
+  complete: boolean
 }
