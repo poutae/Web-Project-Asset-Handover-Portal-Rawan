@@ -24,7 +24,10 @@ public sealed class RealtimeListener : IAsyncDisposable
             {
                 options.HttpMessageHandlerFactory = _ => factory.Server.CreateHandler();
                 options.Transports = HttpTransportType.LongPolling;
-                options.Headers["Cookie"] = signedIn.CookieHeader;
+                if (signedIn.CookieHeader.Length > 0)
+                {
+                    options.Headers["Cookie"] = signedIn.CookieHeader;
+                }
             })
             .Build();
 
