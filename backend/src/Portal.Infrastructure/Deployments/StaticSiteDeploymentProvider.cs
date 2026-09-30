@@ -43,12 +43,13 @@ public sealed partial class StaticSiteDeploymentProvider(
 
         var redactor = new LogRedactor(request.AccessToken);
         void Forward(string line, bool isError) => log.Output(redactor.Redact(line), isError);
+        void Say(string message) => log.System(redactor.Redact(message));
         var timeout = TimeSpan.FromSeconds(_options.BuildTimeoutSeconds);
         var environment = GitEnvironment(request.AccessToken);
 
         try
         {
-            log.System($"Fetching {request.RepositoryUrl} at '{request.Ref}' using the '{sandbox.Name}' sandbox.");
+            Say($"Fetching {request.RepositoryUrl} at '{request.Ref}' using the '{sandbox.Name}' sandbox.");
             var fileProtocol = _options.AllowLocalRepositories ? "always" : "never";
             string[] git = ["-c", "protocol.ext.allow=never", "-c", $"protocol.file.allow={fileProtocol}", "-c", "core.fsmonitor=false", "-c", "advice.detachedHead=false"];
 
@@ -59,12 +60,12 @@ public sealed partial class StaticSiteDeploymentProvider(
             var revision = await RunStepAsync(SandboxCommand.Exec(repo, "git", ["rev-parse", "HEAD"], environment, timeout), "read the commit");
             var commitSha = revision.OutputLines.LastOrDefault(l => CommitPattern().IsMatch(l.Trim()))?.Trim()
                 ?? throw new DeploymentFailedException("Could not determine the commit that was built.");
-            log.System($"Building commit {commitSha[..Math.Min(12, commitSha.Length)]}.");
+            Say($"Building commit {commitSha[..Math.Min(12, commitSha.Length)]}.");
 
-            log.System($"Running: {request.BuildCommand}");
+            Say($"Running: {request.BuildCommand}");
             await RunStepAsync(SandboxCommand.Shell(repo, request.BuildCommand, environment, timeout), "run the build command");
 
-            log.System($"Collecting '{request.OutputDirectory}'.");
+            Say($"Collecting '{request.OutputDirectory}'.");
             var output = ResolveOutputDirectory(repo, request.OutputDirectory);
             var release = StoreRelease(request, output, log, commitSha);
             return release;
