@@ -16,6 +16,7 @@ jobs:
   backend:
     name: Backend (build, format, tests)
     runs-on: windows-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: backend
@@ -30,12 +31,22 @@ jobs:
         run: dotnet build Portal.slnx -c Release --no-restore
       - name: Format
         run: dotnet format Portal.slnx --verify-no-changes --no-restore
+      - name: Start SQL Server LocalDB
+        shell: pwsh
+        run: |
+          sqllocaldb versions
+          sqllocaldb create MSSQLLocalDB
+          sqllocaldb start MSSQLLocalDB
+          sqllocaldb info MSSQLLocalDB
       - name: Backend tests
+        env:
+          PORTAL_TEST_CONNECTION: Server=(localdb)\MSSQLLocalDB;Integrated Security=true;TrustServerCertificate=true
         run: dotnet test --solution Portal.slnx -c Release --no-build
 
   frontend:
     name: Frontend (lint, typecheck, tests, build)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: frontend
