@@ -39,6 +39,10 @@ public sealed class PortalApiFactory : WebApplicationFactory<Program>
         builder.UseSetting("RateLimit:AuthPerMinute", "100000");
         builder.UseSetting("Logging:LogLevel:Default", "Warning");
         builder.UseSetting("Logging:LogLevel:Microsoft.EntityFrameworkCore", "Warning");
+
+        // Racing idempotency claims deliberately hit the unique index; EF logs that as an error each time.
+        builder.UseSetting("Logging:LogLevel:Microsoft.EntityFrameworkCore.Update", "None");
+        builder.UseSetting("Logging:LogLevel:Microsoft.EntityFrameworkCore.Database.Command", "None");
     }
 
     public override async ValueTask DisposeAsync()
