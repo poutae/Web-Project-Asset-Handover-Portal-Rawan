@@ -3,7 +3,9 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Portal.Api;
+using Portal.Api.Concurrency;
 using Portal.Api.Endpoints;
+using Portal.Api.Projects;
 using Portal.Api.Security;
 using Portal.Domain;
 using Portal.Infrastructure.Identity;
@@ -16,6 +18,8 @@ var isProduction = builder.Environment.IsProduction();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<ITenantContext, HttpTenantContext>();
+builder.Services.AddScoped<CurrentUser>();
+builder.Services.AddScoped<ProjectAccess>();
 builder.Services.AddDbContext<PortalDbContext>((serviceProvider, options) =>
 {
     var connectionString = serviceProvider.GetRequiredService<IConfiguration>().GetConnectionString("Default")
@@ -116,6 +120,7 @@ app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseMiddleware<CsrfMiddleware>();
+app.UseMiddleware<IdempotencyMiddleware>();
 
 app.MapGet("/api/health", () => Results.Ok(new { status = "ok" }));
 app.MapGet("/api/health/ready", async (PortalDbContext db, CancellationToken ct) =>
@@ -125,6 +130,7 @@ app.MapGet("/api/health/ready", async (PortalDbContext db, CancellationToken ct)
 
 app.MapAuthEndpoints();
 app.MapOrganizationEndpoints();
+app.MapProjectEndpoints();
 
 app.Run();
 
