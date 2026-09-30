@@ -19,3 +19,7 @@ csharp_style_var_when_type_is_apparent = true:suggestion
 dotnet_diagnostic.CA1707.severity = none   # underscores in test names
 dotnet_diagnostic.CA1848.severity = none   # LoggerMessage delegates not required
 dotnet_diagnostic.CA1873.severity = none
+
+[**/Migrations/*.cs]
+generated_code = true
+dotnet_analyzer_diagnostic.severity = none
