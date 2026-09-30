@@ -23,17 +23,17 @@ public sealed class LocalProcessSandbox : IBuildSandbox
         {
             if (OperatingSystem.IsWindows())
             {
+                // cmd.exe does not understand the backslash-escaped quotes that ArgumentList would produce, so
+                // hand it the raw line; /s makes it strip exactly the outer pair of quotes and run the rest as is.
                 startInfo.FileName = "cmd.exe";
-                startInfo.ArgumentList.Add("/d");
-                startInfo.ArgumentList.Add("/c");
+                startInfo.Arguments = $"/d /s /c \"{shell}\"";
             }
             else
             {
                 startInfo.FileName = "/bin/sh";
                 startInfo.ArgumentList.Add("-c");
+                startInfo.ArgumentList.Add(shell);
             }
-
-            startInfo.ArgumentList.Add(shell);
         }
         else
         {

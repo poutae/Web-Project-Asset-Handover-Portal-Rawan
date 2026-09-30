@@ -299,10 +299,21 @@ public sealed partial class StaticSiteDeploymentProvider(
     {
         try
         {
-            if (Directory.Exists(path))
+            if (!Directory.Exists(path))
             {
-                Directory.Delete(path, recursive: true);
+                return;
             }
+
+            // Git marks its object files read-only (notably on Windows), which makes a plain recursive delete fail.
+            foreach (var entry in new DirectoryInfo(path).EnumerateFileSystemInfos("*", SearchOption.AllDirectories))
+            {
+                if (entry.LinkTarget is null && entry.Attributes.HasFlag(FileAttributes.ReadOnly))
+                {
+                    entry.Attributes &= ~FileAttributes.ReadOnly;
+                }
+            }
+
+            Directory.Delete(path, recursive: true);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
