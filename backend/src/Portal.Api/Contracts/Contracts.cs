@@ -68,3 +68,20 @@ public sealed record NoteDto(
     string Version);
 
 public sealed record SaveNoteRequest(string? Body, NoteVisibility Visibility);
+
+public sealed record DocumentDto(
+    Guid Id,
+    Guid ProjectId,
+    string Title,
+    string FileName,
+    string ContentType,
+    long SizeBytes,
+    string Sha256,
+    DocumentVisibility Visibility,
+    Guid UploadedByUserId,
+    string UploadedByName,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt,
+    string Version);
+
+public sealed record UpdateDocumentRequest(string? Title, DocumentVisibility Visibility);

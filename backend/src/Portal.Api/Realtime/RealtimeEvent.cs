@@ -6,6 +6,7 @@ public static class RealtimeKinds
     public const string Member = "member";
     public const string Milestone = "milestone";
     public const string Note = "note";
+    public const string Document = "document";
 }
 
 public static class RealtimeActions

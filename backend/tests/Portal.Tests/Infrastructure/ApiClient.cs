@@ -49,6 +49,17 @@ public sealed class ApiClient : IDisposable
         return await _http.SendAsync(request, TestContext.Current.CancellationToken);
     }
 
+    /// <summary>Sends arbitrary content (for example a multipart upload) with CSRF and an idempotency key.</summary>
+    public async Task<HttpResponseMessage> SendContentAsync(
+        HttpMethod method, string url, HttpContent content, string? idempotencyKey = null)
+    {
+        var csrf = await FetchCsrfTokenAsync();
+        using var request = new HttpRequestMessage(method, url) { Content = content };
+        request.Headers.Add("X-CSRF-TOKEN", csrf);
+        request.Headers.Add("Idempotency-Key", idempotencyKey ?? Guid.NewGuid().ToString("N"));
+        return await _http.SendAsync(request, TestContext.Current.CancellationToken);
+    }
+
     /// <summary>Sends a POST that deliberately omits the CSRF header.</summary>
     public async Task<HttpResponseMessage> PostWithoutCsrfAsync(string url, object? body = null) =>
         await _http.PostAsJsonAsync(url, body, TestContext.Current.CancellationToken);
