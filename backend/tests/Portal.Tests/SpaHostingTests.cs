@@ -24,6 +24,7 @@ public sealed class SpaHostingTests : IClassFixture<WebApplicationFactory<Progra
         {
             builder.UseSetting("Frontend:DistPath", _dist);
             builder.UseSetting("Database:MigrateOnStartup", "false");
+            builder.UseSetting("Deploy:WorkerEnabled", "false");
             builder.UseSetting("ConnectionStrings:Default", "Server=unreachable;Database=none");
         });
     }

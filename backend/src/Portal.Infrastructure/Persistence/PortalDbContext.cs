@@ -27,6 +27,14 @@ public sealed class PortalDbContext(DbContextOptions<PortalDbContext> options, I
 
     public DbSet<Document> Documents => Set<Document>();
 
+    public DbSet<DeploymentEnvironment> DeploymentEnvironments => Set<DeploymentEnvironment>();
+
+    public DbSet<Deployment> Deployments => Set<Deployment>();
+
+    public DbSet<DeploymentLogLine> DeploymentLogLines => Set<DeploymentLogLine>();
+
+    public DbSet<BackgroundJob> BackgroundJobs => Set<BackgroundJob>();
+
     public DbSet<IdempotencyRecord> IdempotencyRecords => Set<IdempotencyRecord>();
 
     /// <summary>Read by the global query filters; EF re-evaluates it per context instance.</summary>
@@ -103,6 +111,52 @@ public sealed class PortalDbContext(DbContextOptions<PortalDbContext> options, I
             e.HasIndex(d => new { d.ProjectId, d.CreatedAt });
             e.HasOne<Project>().WithMany().HasForeignKey(d => d.ProjectId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne<AppUser>().WithMany().HasForeignKey(d => d.UploadedByUserId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<DeploymentEnvironment>(e =>
+        {
+            e.Property(x => x.Name).HasMaxLength(100);
+            e.Property(x => x.SiteLabel).HasMaxLength(63);
+            e.Property(x => x.RepositoryUrl).HasMaxLength(500);
+            e.Property(x => x.Branch).HasMaxLength(200);
+            e.Property(x => x.BuildCommand).HasMaxLength(1000);
+            e.Property(x => x.OutputDirectory).HasMaxLength(200);
+            e.Property(x => x.HealthPath).HasMaxLength(500);
+            e.Property(x => x.ProtectedAccessToken).HasMaxLength(2000);
+            e.HasIndex(x => x.SiteLabel).IsUnique();
+            e.HasIndex(x => new { x.ProjectId, x.Name }).IsUnique();
+            e.HasOne<Project>().WithMany().HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<Deployment>(e =>
+        {
+            e.Property(x => x.Ref).HasMaxLength(200);
+            e.Property(x => x.CommitSha).HasMaxLength(64);
+            e.Property(x => x.ReleaseKey).HasMaxLength(64);
+            e.Property(x => x.FailureReason).HasMaxLength(1000);
+            e.HasIndex(x => new { x.EnvironmentId, x.CreatedAt });
+
+            // At most one deployment per environment may be active (queued through health checking).
+            e.HasIndex(x => x.EnvironmentId).IsUnique().HasFilter("[Status] IN (1, 2, 3, 4)").HasDatabaseName("UX_Deployments_OneActivePerEnvironment");
+            e.HasOne<DeploymentEnvironment>().WithMany().HasForeignKey(x => x.EnvironmentId).OnDelete(DeleteBehavior.NoAction);
+            e.HasOne<Project>().WithMany().HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.NoAction);
+        });
+
+        builder.Entity<DeploymentLogLine>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).ValueGeneratedOnAdd();
+            e.Property(x => x.Message).HasMaxLength(4000);
+            e.HasIndex(x => new { x.DeploymentId, x.Id });
+            e.HasOne<Deployment>().WithMany().HasForeignKey(x => x.DeploymentId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<BackgroundJob>(e =>
+        {
+            e.Property(x => x.Type).HasMaxLength(50);
+            e.Property(x => x.LockedBy).HasMaxLength(100);
+            e.Property(x => x.Error).HasMaxLength(1000);
+            e.HasIndex(x => new { x.Status, x.RunAfter });
         });
 
         builder.Entity<IdempotencyRecord>(e =>

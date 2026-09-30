@@ -1,18 +1,22 @@
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.Options;
 using Portal.Api;
 using Portal.Api.Concurrency;
+using Portal.Api.Deployments;
 using Portal.Api.Endpoints;
 using Portal.Api.Projects;
 using Portal.Api.Realtime;
 using Portal.Api.Security;
 using Portal.Domain;
+using Portal.Infrastructure.Deployments;
 using Portal.Infrastructure.Identity;
 using Portal.Infrastructure.Persistence;
 using Portal.Infrastructure.Storage;
@@ -28,6 +32,38 @@ builder.Services.AddScoped<CurrentUser>();
 builder.Services.AddScoped<ProjectAccess>();
 builder.Services.AddScoped<IRealtimePublisher, RealtimePublisher>();
 builder.Services.AddSignalR();
+
+builder.Services.Configure<DeployOptions>(builder.Configuration.GetSection(DeployOptions.SectionName));
+builder.Services.PostConfigure<DeployOptions>(deploy =>
+{
+    if (string.IsNullOrWhiteSpace(deploy.Root))
+    {
+        deploy.Root = Path.Combine(builder.Environment.ContentRootPath, "deployments");
+    }
+});
+builder.Services.AddDataProtection()
+    .SetApplicationName("Portal")
+    .PersistKeysToFileSystem(new DirectoryInfo(
+        builder.Configuration["DataProtection:KeysPath"] is { Length: > 0 } keys ? keys : Path.Combine(builder.Environment.ContentRootPath, "keys")));
+builder.Services.AddSingleton<IAccessTokenProtector, AccessTokenProtector>();
+builder.Services.AddSingleton<DeploymentLayout>();
+builder.Services.AddSingleton<IBuildSandbox>(serviceProvider =>
+{
+    var deploy = serviceProvider.GetRequiredService<IOptions<DeployOptions>>().Value;
+    return deploy.Sandbox switch
+    {
+        "local-unsafe" => new LocalProcessSandbox(),
+        "systemd" => new SystemdRunSandbox(deploy.SudoHelperPath),
+        var other => throw new InvalidOperationException($"Deploy:Sandbox '{other}' is not supported (use 'systemd' or 'local-unsafe')."),
+    };
+});
+builder.Services.AddHttpClient(StaticSiteDeploymentProvider.HealthClientName)
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false, UseProxy = false });
+builder.Services.AddSingleton<IDeploymentProvider, StaticSiteDeploymentProvider>();
+builder.Services.AddScoped<DeploymentPipeline>();
+builder.Services.AddScoped<DeploymentContext>();
+builder.Services.AddSingleton<JobSignal>();
+builder.Services.AddHostedService<DeploymentWorker>();
 
 builder.Services.AddSingleton<IFileStorage>(serviceProvider =>
 {
@@ -137,8 +173,18 @@ if (app.Configuration.GetValue<bool>("Database:MigrateOnStartup"))
     await scope.ServiceProvider.GetRequiredService<PortalDbContext>().Database.MigrateAsync();
 }
 
+// The unsafe development sandbox provides no isolation, so it can never run in production.
+if (app.Environment.IsProduction()
+    && string.Equals(app.Configuration["Deploy:Sandbox"], "local-unsafe", StringComparison.OrdinalIgnoreCase))
+{
+    throw new InvalidOperationException("Deploy:Sandbox=local-unsafe is not allowed in Production.");
+}
+
 app.UseForwardedHeaders();
 app.UseExceptionHandler();
+
+// Deployed client sites are answered here, before anything portal-specific (cookies, auth, API) runs.
+app.UseMiddleware<SiteHostMiddleware>();
 // Serve the built frontend (and its service worker) from the API when Frontend:DistPath is configured,
 // so the whole portal is a single deployable. Static files must be served BEFORE routing: once routing
 // has matched an endpoint (including the SPA fallback below) the static file middleware steps aside.
@@ -180,6 +226,7 @@ app.MapProjectEndpoints();
 app.MapMilestoneEndpoints();
 app.MapNoteEndpoints();
 app.MapDocumentEndpoints();
+app.MapDeploymentEndpoints();
 app.MapHub<PortalHub>(PortalHub.Path);
 
 // Unknown /api, /hubs, and /assets paths stay 404 instead of falling back to the SPA shell.

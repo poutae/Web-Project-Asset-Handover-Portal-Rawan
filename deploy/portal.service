@@ -1,0 +1,25 @@
+# /etc/systemd/system/portal.service
+[Unit]
+Description=Web Project Asset & Handover Portal
+After=network-online.target mssql-server.service
+Wants=network-online.target
+
+[Service]
+Type=exec
+User=portal
+Group=portal
+WorkingDirectory=/opt/portal
+ExecStart=/usr/bin/dotnet /opt/portal/Portal.Api.dll
+Restart=on-failure
+RestartSec=5
+EnvironmentFile=/etc/portal/portal.env
+# The build helper needs sudo, so NoNewPrivileges must stay off for this unit. Everything else is locked down.
+NoNewPrivileges=no
+ProtectSystem=full
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/var/lib/portal
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target

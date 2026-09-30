@@ -55,6 +55,12 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
         case 'document':
           void queryClient.invalidateQueries({ queryKey: keys.documents(id) })
           break
+        case 'environment':
+        case 'deployment':
+          void queryClient.invalidateQueries({ queryKey: keys.environments(id) })
+          void queryClient.invalidateQueries({ queryKey: ['deployments', id] })
+          void queryClient.invalidateQueries({ queryKey: ['deployment-logs'] })
+          break
       }
     })
     connection.onreconnecting(() => setStatus('reconnecting'))

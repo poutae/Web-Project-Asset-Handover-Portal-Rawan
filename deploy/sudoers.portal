@@ -1,0 +1,4 @@
+# /etc/sudoers.d/portal-build  (mode 0440, edit with visudo -f)
+# The portal service user may run exactly one helper, as root, without a password. SETENV lets it forward
+# the small allow-list of variables the helper itself re-filters.
+portal ALL=(root) NOPASSWD:SETENV: /usr/local/lib/portal/run-build
