@@ -24,3 +24,22 @@ public sealed record CreatedInvitationDto(
     Guid Id, string Email, OrgRole Role, DateTimeOffset ExpiresAt, string Token);
 
 public sealed record AcceptInvitationRequest(string? Token, string? DisplayName, string? Password);
+
+public sealed record ProjectDto(
+    Guid Id,
+    string Name,
+    string Description,
+    ProjectStatus Status,
+    DateTimeOffset CreatedAt,
+    ProjectRole? MyRole,
+    string Version);
+
+public sealed record CreateProjectRequest(string? Name, string? Description);
+
+public sealed record UpdateProjectRequest(string? Name, string? Description, ProjectStatus Status);
+
+public sealed record ProjectMemberDto(Guid UserId, string DisplayName, string Email, ProjectRole Role, string Version);
+
+public sealed record AddProjectMemberRequest(Guid UserId, ProjectRole Role);
+
+public sealed record UpdateProjectMemberRequest(ProjectRole Role);

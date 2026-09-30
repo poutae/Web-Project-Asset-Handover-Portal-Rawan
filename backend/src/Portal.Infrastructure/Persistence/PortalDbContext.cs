@@ -17,6 +17,12 @@ public sealed class PortalDbContext(DbContextOptions<PortalDbContext> options, I
 
     public DbSet<Invitation> Invitations => Set<Invitation>();
 
+    public DbSet<Project> Projects => Set<Project>();
+
+    public DbSet<ProjectMember> ProjectMembers => Set<ProjectMember>();
+
+    public DbSet<IdempotencyRecord> IdempotencyRecords => Set<IdempotencyRecord>();
+
     /// <summary>Read by the global query filters; EF re-evaluates it per context instance.</summary>
     public Guid? CurrentOrganizationId => tenant.OrganizationId;
 
@@ -46,6 +52,33 @@ public sealed class PortalDbContext(DbContextOptions<PortalDbContext> options, I
             e.HasIndex(i => i.TokenHash).IsUnique();
             e.HasIndex(i => new { i.OrganizationId, i.NormalizedEmail });
             e.HasOne<Organization>().WithMany().HasForeignKey(i => i.OrganizationId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<Project>(e =>
+        {
+            e.Property(p => p.Name).HasMaxLength(200);
+            e.Property(p => p.Description).HasMaxLength(4000);
+            e.HasIndex(p => new { p.OrganizationId, p.Status });
+            e.HasOne<Organization>().WithMany().HasForeignKey(p => p.OrganizationId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<ProjectMember>(e =>
+        {
+            e.HasIndex(m => new { m.ProjectId, m.UserId }).IsUnique();
+            e.HasIndex(m => m.UserId);
+            e.HasOne<Project>().WithMany().HasForeignKey(m => m.ProjectId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<AppUser>().WithMany().HasForeignKey(m => m.UserId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<IdempotencyRecord>(e =>
+        {
+            e.Property(r => r.Key).HasMaxLength(128);
+            e.Property(r => r.RequestHash).HasMaxLength(32);
+            e.Property(r => r.ContentType).HasMaxLength(200);
+            e.Property(r => r.Location).HasMaxLength(500);
+            e.Property(r => r.ETag).HasMaxLength(100);
+            e.HasIndex(r => new { r.OrganizationId, r.UserId, r.Key }).IsUnique();
+            e.HasIndex(r => r.CreatedAt);
         });
 
         // Organizations are only visible to their own members.

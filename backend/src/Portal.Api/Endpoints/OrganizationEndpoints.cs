@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
+using Portal.Api.Concurrency;
 using Portal.Api.Contracts;
 using Portal.Api.Security;
 using Portal.Domain;
@@ -21,7 +22,9 @@ public static class OrganizationEndpoints
 
         org.MapGet("/members", ListMembers).RequireAuthorization(PortalPolicies.OrgStaff);
 
-        var invitations = org.MapGroup("/invitations").RequireAuthorization(PortalPolicies.OrgAdmin);
+        var invitations = org.MapGroup("/invitations")
+            .RequireAuthorization(PortalPolicies.OrgAdmin)
+            .WithMetadata(new RequireIdempotencyKeyAttribute());
         invitations.MapGet("/", ListInvitations);
         invitations.MapPost("/", CreateInvitation);
         invitations.MapDelete("/{id:guid}", RevokeInvitation);
