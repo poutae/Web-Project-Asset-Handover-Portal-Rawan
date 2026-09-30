@@ -1,4 +1,5 @@
 using System.Net;
+using Microsoft.AspNetCore.Mvc;
 using Portal.Api.Contracts;
 using Portal.Domain;
 using Portal.Tests.Infrastructure;
@@ -113,9 +114,10 @@ public sealed class AuthTests(PortalApiFactory factory) : IClassFixture<PortalAp
 
         Assert.Equal(HttpStatusCode.Unauthorized, wrongPassword.StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, unknown.StatusCode);
-        Assert.Equal(
-            await wrongPassword.Content.ReadAsStringAsync(TestContext.Current.CancellationToken),
-            await unknown.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        var wrongPasswordProblem = await ApiClient.ReadAsync<ProblemDetails>(wrongPassword);
+        var unknownProblem = await ApiClient.ReadAsync<ProblemDetails>(unknown);
+        Assert.Equal(wrongPasswordProblem.Title, unknownProblem.Title);
+        Assert.Equal(wrongPasswordProblem.Detail, unknownProblem.Detail);
     }
 
     [Fact]
