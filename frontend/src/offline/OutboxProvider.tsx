@@ -94,7 +94,7 @@ export function OutboxProvider({ userId, children }: { userId: string; children:
   // Retry while anything is queued, and keep looking for entries left behind by closed tabs.
   useEffect(() => {
     const timer = window.setInterval(() => {
-      if (document.visibilityState === 'visible' && browserOnline) void run()
+      if (browserOnline) void run()
     }, RETRY_INTERVAL_MS)
     return () => window.clearInterval(timer)
   }, [browserOnline, run])
