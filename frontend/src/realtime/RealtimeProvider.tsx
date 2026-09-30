@@ -52,6 +52,9 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
         case 'note':
           void queryClient.invalidateQueries({ queryKey: keys.notes(id) })
           break
+        case 'document':
+          void queryClient.invalidateQueries({ queryKey: keys.documents(id) })
+          break
       }
     })
     connection.onreconnecting(() => setStatus('reconnecting'))
