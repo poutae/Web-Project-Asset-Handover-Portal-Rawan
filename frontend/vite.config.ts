@@ -13,6 +13,10 @@ export default defineConfig(({ mode }) => {
         '/api': {
           target: env.VITE_API_PROXY_TARGET ?? 'http://localhost:5080',
           changeOrigin: false,
+        },
+        '/hubs': {
+          target: env.VITE_API_PROXY_TARGET ?? 'http://localhost:5080',
+          changeOrigin: false,
           ws: true,
         },
       },
