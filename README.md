@@ -53,6 +53,18 @@ Prerequisites: .NET 10 SDK, Node.js 22+, git, and SQL Server running on `localho
 ./scripts/migrate.ps1   # applies database migrations (production never migrates automatically)
 ```
 
+### Running from Visual Studio
+
+Needs Visual Studio 2026 (or 2022 17.14+, for `.slnx` and .NET 10), Node.js 22+, and SQL Server on `localhost`.
+
+1. Open `backend/Portal.slnx`, set **Portal.Api** as the startup project, and press F5 (profile `http`).
+2. The API starts the frontend for you: on the first run it installs the npm packages (`npm ci`, about a minute), then starts Vite and holds back start-up until it answers, so the browser opens on **http://localhost:5173** with the app ready. The API itself is on `http://localhost:5080`.
+3. The database is created or updated on start-up, using the connection string in `appsettings.Development.json` (`PortalDev` on `localhost`, Windows sign-in). To use another SQL Server, set the `ConnectionStrings__Default` environment variable instead of editing the file.
+
+Notes: stopping the debugger abruptly can leave Vite running; the next F5 sees it and reuses it. Set `Frontend__DevServer__Enabled=false` in the launch profile to run `npm run dev` yourself. `scripts/dev.ps1` does the same job from PowerShell.
+
+"Deploy on Our Platform" also needs `Deploy__BaseDomain` and, on Windows, `Deploy__Sandbox=local-unsafe` (development only); everything else works without them.
+
 Running on your own server: see [`deploy/README.md`](deploy/README.md).
 
 ### Tests
