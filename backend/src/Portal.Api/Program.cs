@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.StaticFiles;
@@ -14,6 +15,7 @@ using Portal.Api.Security;
 using Portal.Domain;
 using Portal.Infrastructure.Identity;
 using Portal.Infrastructure.Persistence;
+using Portal.Infrastructure.Storage;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -26,6 +28,17 @@ builder.Services.AddScoped<CurrentUser>();
 builder.Services.AddScoped<ProjectAccess>();
 builder.Services.AddScoped<IRealtimePublisher, RealtimePublisher>();
 builder.Services.AddSignalR();
+
+builder.Services.AddSingleton<IFileStorage>(serviceProvider =>
+{
+    var configuration = serviceProvider.GetRequiredService<IConfiguration>();
+    var root = configuration["Storage:Root"] is { Length: > 0 } configured
+        ? configured
+        : Path.Combine(serviceProvider.GetRequiredService<IHostEnvironment>().ContentRootPath, "storage");
+    return new LocalFileStorage(root);
+});
+builder.Services.Configure<FormOptions>(options =>
+    options.MultipartBodyLengthLimit = long.MaxValue); // the per-request size feature enforces the real limit
 builder.Services.AddDbContext<PortalDbContext>((serviceProvider, options) =>
 {
     var connectionString = serviceProvider.GetRequiredService<IConfiguration>().GetConnectionString("Default")
@@ -166,6 +179,7 @@ app.MapOrganizationEndpoints();
 app.MapProjectEndpoints();
 app.MapMilestoneEndpoints();
 app.MapNoteEndpoints();
+app.MapDocumentEndpoints();
 app.MapHub<PortalHub>(PortalHub.Path);
 
 // Unknown /api, /hubs, and /assets paths stay 404 instead of falling back to the SPA shell.

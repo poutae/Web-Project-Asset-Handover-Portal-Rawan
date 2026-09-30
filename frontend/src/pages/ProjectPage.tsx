@@ -17,6 +17,7 @@ import {
 } from '../components/ui'
 import { overlayPending } from '../offline/optimistic'
 import { useOutbox } from '../offline/OutboxProvider'
+import { DocumentsTab } from './DocumentsTab'
 import { MembersTab } from './MembersTab'
 import { MilestonesTab } from './MilestonesTab'
 import { NotesTab } from './NotesTab'
@@ -24,6 +25,7 @@ import { NotesTab } from './NotesTab'
 const TABS = [
   { id: 'milestones', label: 'Milestones' },
   { id: 'notes', label: 'Notes' },
+  { id: 'documents', label: 'Documents' },
   { id: 'members', label: 'Members' },
 ] as const
 
@@ -107,6 +109,7 @@ export function ProjectPage() {
       <div role="tabpanel">
         {tab === 'milestones' && <MilestonesTab project={shown} />}
         {tab === 'notes' && <NotesTab project={shown} />}
+        {tab === 'documents' && <DocumentsTab project={shown} />}
         {tab === 'members' && <MembersTab project={shown} />}
       </div>
 

@@ -47,6 +47,8 @@ export interface Problem {
 export interface RequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE'
   body?: unknown
+  /** A multipart body (file upload). The browser sets the content type, including the boundary. */
+  form?: FormData
   /** Sent as `If-Match`; required by the server for updates and deletes. */
   version?: string
   /** Sent as `Idempotency-Key`; retries with the same key are replayed, not re-run. */
@@ -86,7 +88,7 @@ async function send(
   token: string | null,
 ): Promise<Response> {
   const headers: Record<string, string> = { Accept: 'application/json', 'X-Client-Id': getTabId() }
-  if (options.body !== undefined) headers['Content-Type'] = 'application/json'
+  if (options.body !== undefined && !options.form) headers['Content-Type'] = 'application/json'
   if (token) headers['X-CSRF-TOKEN'] = token
   if (options.version) headers['If-Match'] = `"${options.version}"`
   if (options.idempotencyKey) headers['Idempotency-Key'] = options.idempotencyKey
@@ -96,7 +98,7 @@ async function send(
       method: options.method ?? 'GET',
       credentials: 'same-origin',
       headers,
-      body: options.body === undefined ? undefined : JSON.stringify(options.body),
+      body: options.form ?? (options.body === undefined ? undefined : JSON.stringify(options.body)),
       signal: options.signal,
     })
   } catch (error) {

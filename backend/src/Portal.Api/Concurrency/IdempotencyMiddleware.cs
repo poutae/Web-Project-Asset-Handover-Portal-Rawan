@@ -8,7 +8,14 @@ namespace Portal.Api.Concurrency;
 
 /// <summary>Marks endpoints whose mutations must carry an <c>Idempotency-Key</c> header.</summary>
 [AttributeUsage(AttributeTargets.Method | AttributeTargets.Class)]
-public sealed class RequireIdempotencyKeyAttribute : Attribute;
+public sealed class RequireIdempotencyKeyAttribute : Attribute
+{
+    /// <summary>
+    /// When false the request body is not read or compared (large multipart uploads); the key is then bound
+    /// to the method, path, and content length instead.
+    /// </summary>
+    public bool HashBody { get; init; } = true;
+}
 
 /// <summary>
 /// Makes retried mutations safe. The first request with a given key runs normally and its response is
@@ -40,11 +47,22 @@ public sealed class IdempotencyMiddleware(RequestDelegate next)
             return;
         }
 
-        var body = await ReadBodyAsync(context);
-        if (body is null)
+        var hashBody = context.GetEndpoint()?.Metadata.GetMetadata<RequireIdempotencyKeyAttribute>()?.HashBody ?? true;
+        byte[] body;
+        if (hashBody)
         {
-            await WriteProblemAsync(context, StatusCodes.Status413PayloadTooLarge, "The request body is too large.");
-            return;
+            var read = await ReadBodyAsync(context);
+            if (read is null)
+            {
+                await WriteProblemAsync(context, StatusCodes.Status413PayloadTooLarge, "The request body is too large.");
+                return;
+            }
+
+            body = read;
+        }
+        else
+        {
+            body = System.Text.Encoding.UTF8.GetBytes($"length:{context.Request.ContentLength}");
         }
 
         var hash = SHA256.HashData([

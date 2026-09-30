@@ -25,6 +25,8 @@ public sealed class PortalDbContext(DbContextOptions<PortalDbContext> options, I
 
     public DbSet<Note> Notes => Set<Note>();
 
+    public DbSet<Document> Documents => Set<Document>();
+
     public DbSet<IdempotencyRecord> IdempotencyRecords => Set<IdempotencyRecord>();
 
     /// <summary>Read by the global query filters; EF re-evaluates it per context instance.</summary>
@@ -88,6 +90,19 @@ public sealed class PortalDbContext(DbContextOptions<PortalDbContext> options, I
             e.HasIndex(n => new { n.ProjectId, n.CreatedAt });
             e.HasOne<Project>().WithMany().HasForeignKey(n => n.ProjectId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne<AppUser>().WithMany().HasForeignKey(n => n.AuthorUserId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<Document>(e =>
+        {
+            e.Property(d => d.Title).HasMaxLength(200);
+            e.Property(d => d.FileName).HasMaxLength(255);
+            e.Property(d => d.ContentType).HasMaxLength(100);
+            e.Property(d => d.Sha256).HasMaxLength(32);
+            e.Property(d => d.StorageKey).HasMaxLength(32);
+            e.HasIndex(d => d.StorageKey).IsUnique();
+            e.HasIndex(d => new { d.ProjectId, d.CreatedAt });
+            e.HasOne<Project>().WithMany().HasForeignKey(d => d.ProjectId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<AppUser>().WithMany().HasForeignKey(d => d.UploadedByUserId).OnDelete(DeleteBehavior.Restrict);
         });
 
         builder.Entity<IdempotencyRecord>(e =>

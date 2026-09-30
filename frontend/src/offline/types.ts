@@ -1,5 +1,5 @@
 export type OutboxStatus = 'pending' | 'conflict' | 'failed'
-export type ListName = 'projects' | 'milestones' | 'notes' | 'members'
+export type ListName = 'projects' | 'milestones' | 'notes' | 'members' | 'documents'
 
 /** How a queued change should look in the UI before the server has confirmed it. */
 export type Optimistic =

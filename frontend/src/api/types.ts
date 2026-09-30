@@ -3,6 +3,7 @@ export type ProjectRole = 'Lead' | 'Contributor' | 'Client'
 export type ProjectStatus = 'Active' | 'OnHold' | 'Completed' | 'Archived'
 export type MilestoneStatus = 'Planned' | 'InProgress' | 'Done' | 'Blocked'
 export type NoteVisibility = 'Internal' | 'Client'
+export type DocumentVisibility = 'Internal' | 'Client'
 export type InvitationStatus = 'Pending' | 'Accepted' | 'Revoked' | 'Expired'
 
 export interface Organization {
@@ -67,6 +68,22 @@ export interface Note {
   version: string
 }
 
+export interface PortalDocument {
+  id: string
+  projectId: string
+  title: string
+  fileName: string
+  contentType: string
+  sizeBytes: number
+  sha256: string
+  visibility: DocumentVisibility
+  uploadedByUserId: string
+  uploadedByName: string
+  createdAt: string
+  updatedAt: string
+  version: string
+}
+
 export interface Invitation {
   id: string
   email: string
@@ -85,7 +102,7 @@ export interface CreatedInvitation {
 }
 
 export interface RealtimeChange {
-  kind: 'project' | 'member' | 'milestone' | 'note'
+  kind: 'project' | 'member' | 'milestone' | 'note' | 'document'
   action: 'created' | 'updated' | 'deleted'
   projectId: string
   entityId: string
