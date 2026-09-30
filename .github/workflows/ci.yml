@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (build, format, tests)
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Restore
+        run: dotnet restore Portal.slnx
+      - name: Build
+        run: dotnet build Portal.slnx -c Release --no-restore
+      - name: Format
+        run: dotnet format Portal.slnx --verify-no-changes --no-restore
+      - name: Backend tests
+        run: dotnet test --solution Portal.slnx -c Release --no-build
+
+  frontend:
+    name: Frontend (lint, typecheck, tests, build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - name: Format
+        run: npm run format:check
+      - name: Frontend lint
+        run: npm run lint
+      - name: Frontend typecheck
+        run: npm run typecheck
+      - name: Frontend tests
+        run: npm test
+      - name: Production build
+        run: npm run build
