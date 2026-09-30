@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Portal.Api.Concurrency;
 using Portal.Api.Contracts;
 using Portal.Api.Projects;
+using Portal.Api.Realtime;
 using Portal.Domain;
 using Portal.Infrastructure.Persistence;
 
@@ -48,6 +49,7 @@ public static class MilestoneEndpoints
         SaveMilestoneRequest request,
         ProjectAccess access,
         PortalDbContext db,
+        IRealtimePublisher realtime,
         TimeProvider clock,
         HttpResponse response,
         CancellationToken ct)
@@ -80,6 +82,7 @@ public static class MilestoneEndpoints
         };
         db.Milestones.Add(milestone);
         await db.SaveChangesAsync(ct);
+        await realtime.PublishAsync(RealtimeKinds.Milestone, RealtimeActions.Created, projectId, milestone.Id, milestone.RowVersion, false, ct);
 
         response.Headers.ETag = OptimisticConcurrency.ToETag(milestone.RowVersion);
         return Results.Created($"/api/projects/{projectId}/milestones/{milestone.Id}", ToDto(milestone));
@@ -91,6 +94,7 @@ public static class MilestoneEndpoints
         SaveMilestoneRequest request,
         ProjectAccess access,
         PortalDbContext db,
+        IRealtimePublisher realtime,
         HttpRequest httpRequest,
         HttpResponse response,
         CancellationToken ct)
@@ -135,6 +139,7 @@ public static class MilestoneEndpoints
             return conflict;
         }
 
+        await realtime.PublishAsync(RealtimeKinds.Milestone, RealtimeActions.Updated, projectId, milestoneId, milestone.RowVersion, false, ct);
         response.Headers.ETag = OptimisticConcurrency.ToETag(milestone.RowVersion);
         return Results.Ok(ToDto(milestone));
     }
@@ -144,6 +149,7 @@ public static class MilestoneEndpoints
         Guid milestoneId,
         ProjectAccess access,
         PortalDbContext db,
+        IRealtimePublisher realtime,
         HttpRequest httpRequest,
         CancellationToken ct)
     {
@@ -172,7 +178,14 @@ public static class MilestoneEndpoints
         OptimisticConcurrency.Expect(db, milestone, expected);
         db.Milestones.Remove(milestone);
 
-        return await OptimisticConcurrency.SaveAsync(db, milestone, ToDto, ct) ?? Results.NoContent();
+        var conflict = await OptimisticConcurrency.SaveAsync(db, milestone, ToDto, ct);
+        if (conflict is not null)
+        {
+            return conflict;
+        }
+
+        await realtime.PublishAsync(RealtimeKinds.Milestone, RealtimeActions.Deleted, projectId, milestoneId, null, false, ct);
+        return Results.NoContent();
     }
 
     private static (string? Title, string Description, ValidationErrors Errors) Validate(SaveMilestoneRequest request)

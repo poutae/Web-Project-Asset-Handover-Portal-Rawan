@@ -1,11 +1,14 @@
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.FileProviders;
 using Portal.Api;
 using Portal.Api.Concurrency;
 using Portal.Api.Endpoints;
 using Portal.Api.Projects;
+using Portal.Api.Realtime;
 using Portal.Api.Security;
 using Portal.Domain;
 using Portal.Infrastructure.Identity;
@@ -20,6 +23,8 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<ITenantContext, HttpTenantContext>();
 builder.Services.AddScoped<CurrentUser>();
 builder.Services.AddScoped<ProjectAccess>();
+builder.Services.AddScoped<IRealtimePublisher, RealtimePublisher>();
+builder.Services.AddSignalR();
 builder.Services.AddDbContext<PortalDbContext>((serviceProvider, options) =>
 {
     var connectionString = serviceProvider.GetRequiredService<IConfiguration>().GetConnectionString("Default")
@@ -116,6 +121,7 @@ if (app.Configuration.GetValue<bool>("Database:MigrateOnStartup"))
 app.UseForwardedHeaders();
 app.UseExceptionHandler();
 app.UseMiddleware<SecurityHeadersMiddleware>();
+app.UseMiddleware<OriginCheckMiddleware>();
 app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
@@ -133,6 +139,31 @@ app.MapOrganizationEndpoints();
 app.MapProjectEndpoints();
 app.MapMilestoneEndpoints();
 app.MapNoteEndpoints();
+app.MapHub<PortalHub>(PortalHub.Path);
+
+// Serve the built frontend (and its service worker) from the API when Frontend:DistPath is configured,
+// so the whole portal is a single deployable. Unknown /api and /hubs paths still 404 instead of
+// falling back to the SPA shell.
+if (app.Configuration["Frontend:DistPath"] is { Length: > 0 } distPath && Directory.Exists(distPath))
+{
+    var files = new PhysicalFileProvider(Path.GetFullPath(distPath));
+    static void NoCacheShell(StaticFileResponseContext context)
+    {
+        var name = context.File.Name;
+        context.Context.Response.Headers.CacheControl = name is "index.html" or "sw.js"
+            ? "no-cache"
+            : "public, max-age=31536000, immutable";
+    }
+
+    app.UseDefaultFiles(new DefaultFilesOptions { FileProvider = files });
+    app.UseStaticFiles(new StaticFileOptions { FileProvider = files, OnPrepareResponse = NoCacheShell });
+    app.MapFallback("{*path:regex(^(?!api/|hubs/).*$)}", async context =>
+    {
+        context.Response.Headers.CacheControl = "no-cache";
+        context.Response.ContentType = "text/html; charset=utf-8";
+        await context.Response.SendFileAsync(files.GetFileInfo("index.html"));
+    });
+}
 
 app.Run();
 
