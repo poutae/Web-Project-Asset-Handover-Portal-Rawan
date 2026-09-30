@@ -41,13 +41,32 @@ function acquire(name: string): Promise<boolean> {
   })
 }
 
+const LOCK_RETRY_WINDOW_MS = 1500
+const LOCK_RETRY_STEP_MS = 50
+
+/**
+ * Like <c>acquire</c>, but tolerant of a page reload: the previous page of this very tab may still be
+ * releasing its lock for a moment. A genuine duplicate tab holds the lock for good, so waiting a short
+ * while only ever delays that rare case.
+ */
+async function acquireAfterReload(name: string): Promise<boolean> {
+  const deadline = Date.now() + LOCK_RETRY_WINDOW_MS
+  for (;;) {
+    if (await acquire(name)) return true
+    if (Date.now() >= deadline) return false
+    await new Promise((resolve) => setTimeout(resolve, LOCK_RETRY_STEP_MS))
+  }
+}
+
 /**
  * Gives this tab its identity. The id survives reloads (sessionStorage), but a duplicated tab copies
  * sessionStorage, so the id is only kept if no other live tab already holds its lock.
  */
 export async function initTabIdentity(): Promise<string> {
-  let id = readStored() ?? newId()
-  if (!(await acquire(lockNameFor(id)))) {
+  const stored = readStored()
+  let id = stored ?? newId()
+  const kept = stored ? await acquireAfterReload(lockNameFor(id)) : await acquire(lockNameFor(id))
+  if (!kept) {
     id = newId()
     await acquire(lockNameFor(id))
   }
