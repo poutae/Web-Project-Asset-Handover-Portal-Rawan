@@ -53,9 +53,14 @@ public sealed class ApiClient : IDisposable
     public async Task<HttpResponseMessage> PostWithoutCsrfAsync(string url, object? body = null) =>
         await _http.PostAsJsonAsync(url, body, TestContext.Current.CancellationToken);
 
+    private static readonly System.Text.Json.JsonSerializerOptions JsonOptions = new(System.Text.Json.JsonSerializerDefaults.Web)
+    {
+        Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() },
+    };
+
     public static async Task<T> ReadAsync<T>(HttpResponseMessage response)
     {
-        var value = await response.Content.ReadFromJsonAsync<T>(TestContext.Current.CancellationToken);
+        var value = await response.Content.ReadFromJsonAsync<T>(JsonOptions, TestContext.Current.CancellationToken);
         return value ?? throw new InvalidOperationException("Response body was empty.");
     }
 
