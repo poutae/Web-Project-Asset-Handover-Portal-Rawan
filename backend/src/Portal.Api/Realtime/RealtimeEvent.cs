@@ -7,6 +7,8 @@ public static class RealtimeKinds
     public const string Milestone = "milestone";
     public const string Note = "note";
     public const string Document = "document";
+    public const string Environment = "environment";
+    public const string Deployment = "deployment";
 }
 
 public static class RealtimeActions

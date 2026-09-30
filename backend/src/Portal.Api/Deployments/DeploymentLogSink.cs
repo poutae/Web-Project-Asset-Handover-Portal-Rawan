@@ -24,18 +24,16 @@ public sealed class DeploymentLogSink : IDeploymentLog, IAsyncDisposable
     private readonly Channel<(DateTimeOffset At, LogChannel Channel, string Message)> _queue =
         Channel.CreateUnbounded<(DateTimeOffset, LogChannel, string)>(new UnboundedChannelOptions { SingleReader = true });
     private readonly Task _writer;
-    private readonly Action? _onFlushed;
     private int _accepted;
 
     public DeploymentLogSink(
-        IServiceScopeFactory scopes, Guid organizationId, Guid deploymentId, LogRedactor redactor, TimeProvider clock, Action? onFlushed = null)
+        IServiceScopeFactory scopes, Guid organizationId, Guid deploymentId, LogRedactor redactor, TimeProvider clock)
     {
         _scopes = scopes;
         _organizationId = organizationId;
         _deploymentId = deploymentId;
         _redactor = redactor;
         _clock = clock;
-        _onFlushed = onFlushed;
         _writer = Task.Run(WriteLoopAsync);
     }
 
@@ -114,7 +112,6 @@ public sealed class DeploymentLogSink : IDeploymentLog, IAsyncDisposable
                 await db.SaveChangesAsync();
             }
 
-            _onFlushed?.Invoke();
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

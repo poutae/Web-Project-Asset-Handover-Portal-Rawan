@@ -85,3 +85,56 @@ public sealed record DocumentDto(
     string Version);
 
 public sealed record UpdateDocumentRequest(string? Title, DocumentVisibility Visibility);
+
+public sealed record EnvironmentDto(
+    Guid Id,
+    string Name,
+    string SiteLabel,
+    string? Url,
+    string? RepositoryUrl,
+    string? Branch,
+    string? BuildCommand,
+    string? OutputDirectory,
+    string HealthPath,
+    bool SpaFallback,
+    bool HasAccessToken,
+    Guid? CurrentDeploymentId,
+    string Version);
+
+/// <summary>
+/// <see cref="AccessToken"/> is write-only. Omit it to keep the stored token, send a value to replace it, or
+/// set <see cref="ClearAccessToken"/> to remove it.
+/// </summary>
+public sealed record SaveEnvironmentRequest(
+    string? Name,
+    string? RepositoryUrl,
+    string? Branch,
+    string? BuildCommand,
+    string? OutputDirectory,
+    string? HealthPath,
+    bool SpaFallback,
+    string? AccessToken,
+    bool ClearAccessToken);
+
+public sealed record DeploymentDto(
+    Guid Id,
+    Guid EnvironmentId,
+    DeploymentStatus Status,
+    DeploymentTrigger Trigger,
+    string Ref,
+    string? CommitSha,
+    Guid? SourceDeploymentId,
+    string RequestedByName,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset? StartedAt,
+    DateTimeOffset? FinishedAt,
+    string? FailureReason,
+    bool RevertedToPrevious,
+    bool IsCurrent,
+    bool CanRollback);
+
+public sealed record StartDeploymentRequest(string? Ref);
+
+public sealed record LogLineDto(long Id, DateTimeOffset At, LogChannel Channel, string Message);
+
+public sealed record DeploymentLogsDto(IReadOnlyList<LogLineDto> Lines, long Next, bool Complete);

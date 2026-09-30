@@ -15,6 +15,9 @@ public sealed class DeployOptions
     /// </summary>
     public string BaseDomain { get; set; } = string.Empty;
 
+    /// <summary>The scheme used in the site URLs shown to people (http for local development).</summary>
+    public string PublicScheme { get; set; } = "https";
+
     /// <summary><c>systemd</c> (production: sudo helper + systemd-run) or <c>local-unsafe</c> (development and tests only).</summary>
     public string Sandbox { get; set; } = "systemd";
 

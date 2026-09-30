@@ -135,6 +135,9 @@ public sealed class PortalDbContext(DbContextOptions<PortalDbContext> options, I
             e.Property(x => x.ReleaseKey).HasMaxLength(64);
             e.Property(x => x.FailureReason).HasMaxLength(1000);
             e.HasIndex(x => new { x.EnvironmentId, x.CreatedAt });
+
+            // At most one deployment per environment may be active (queued through health checking).
+            e.HasIndex(x => x.EnvironmentId).IsUnique().HasFilter("[Status] IN (1, 2, 3, 4)").HasDatabaseName("UX_Deployments_OneActivePerEnvironment");
             e.HasOne<DeploymentEnvironment>().WithMany().HasForeignKey(x => x.EnvironmentId).OnDelete(DeleteBehavior.NoAction);
             e.HasOne<Project>().WithMany().HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.NoAction);
         });
