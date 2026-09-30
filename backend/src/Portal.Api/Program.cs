@@ -68,6 +68,10 @@ builder.Services.AddHostedService<DeploymentWorker>();
 builder.Services.Configure<CleanupOptions>(builder.Configuration.GetSection(CleanupOptions.SectionName));
 builder.Services.AddSingleton<CleanupRunner>();
 builder.Services.AddHostedService<CleanupWorker>();
+if (builder.Environment.IsDevelopment() && builder.Configuration.GetValue<bool>("Frontend:DevServer:Enabled"))
+{
+    builder.Services.AddSingleton<IHostedService, Portal.Api.DevTools.FrontendDevServer>();
+}
 
 builder.Services.AddSingleton<IFileStorage>(serviceProvider =>
 {
