@@ -1,5 +1,4 @@
 using System.Net.Http.Json;
-using Microsoft.AspNetCore.Mvc.Testing;
 using Portal.Api.Contracts;
 
 namespace Portal.Tests.Infrastructure;
@@ -8,15 +7,15 @@ namespace Portal.Tests.Infrastructure;
 public sealed class ApiClient : IDisposable
 {
     private readonly HttpClient _http;
+    private readonly CookieJarHandler _cookies = new();
 
     public ApiClient(PortalApiFactory factory)
     {
-        _http = factory.CreateClient(new WebApplicationFactoryClientOptions
-        {
-            HandleCookies = true,
-            AllowAutoRedirect = false,
-        });
+        _http = factory.CreateDefaultClient(_cookies);
     }
+
+    /// <summary>The cookies this client currently holds, for transports other than HttpClient.</summary>
+    public string CookieHeader => _cookies.CookieHeader;
 
     public Task<HttpResponseMessage> GetAsync(string url) => _http.GetAsync(url, TestContext.Current.CancellationToken);
 

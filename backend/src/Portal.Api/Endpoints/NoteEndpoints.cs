@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Portal.Api.Concurrency;
 using Portal.Api.Contracts;
 using Portal.Api.Projects;
+using Portal.Api.Realtime;
 using Portal.Api.Security;
 using Portal.Domain;
 using Portal.Infrastructure.Persistence;
@@ -62,6 +63,7 @@ public static class NoteEndpoints
         ProjectAccess access,
         PortalDbContext db,
         CurrentUser user,
+        IRealtimePublisher realtime,
         TimeProvider clock,
         HttpResponse response,
         CancellationToken ct)
@@ -90,6 +92,8 @@ public static class NoteEndpoints
         };
         db.Notes.Add(note);
         await db.SaveChangesAsync(ct);
+        await realtime.PublishAsync(
+            RealtimeKinds.Note, RealtimeActions.Created, projectId, note.Id, note.RowVersion, note.Visibility == NoteVisibility.Internal, ct);
 
         var authorName = await db.Users.Where(u => u.Id == user.Id).Select(u => u.DisplayName).SingleAsync(ct);
         response.Headers.ETag = OptimisticConcurrency.ToETag(note.RowVersion);
@@ -103,6 +107,7 @@ public static class NoteEndpoints
         ProjectAccess access,
         PortalDbContext db,
         CurrentUser user,
+        IRealtimePublisher realtime,
         TimeProvider clock,
         HttpRequest httpRequest,
         HttpResponse response,
@@ -138,6 +143,7 @@ public static class NoteEndpoints
 
         var authorName = await db.Users.Where(u => u.Id == note.AuthorUserId).Select(u => u.DisplayName).SingleAsync(ct);
 
+        var wasInternal = note.Visibility == NoteVisibility.Internal;
         OptimisticConcurrency.Expect(db, note, expected);
         note.Body = body!;
         note.Visibility = request.Visibility;
@@ -149,6 +155,15 @@ public static class NoteEndpoints
             return conflict;
         }
 
+        // A note that just stopped being client-visible must still reach clients so they can drop it.
+        await realtime.PublishAsync(
+            RealtimeKinds.Note,
+            RealtimeActions.Updated,
+            projectId,
+            noteId,
+            note.RowVersion,
+            wasInternal && note.Visibility == NoteVisibility.Internal,
+            ct);
         response.Headers.ETag = OptimisticConcurrency.ToETag(note.RowVersion);
         return Results.Ok(ToDto(note, authorName));
     }
@@ -159,6 +174,7 @@ public static class NoteEndpoints
         ProjectAccess access,
         PortalDbContext db,
         CurrentUser user,
+        IRealtimePublisher realtime,
         HttpRequest httpRequest,
         CancellationToken ct)
     {
@@ -189,7 +205,15 @@ public static class NoteEndpoints
         OptimisticConcurrency.Expect(db, note, expected);
         db.Notes.Remove(note);
 
-        return await OptimisticConcurrency.SaveAsync(db, note, n => ToDto(n, authorName), ct) ?? Results.NoContent();
+        var conflict = await OptimisticConcurrency.SaveAsync(db, note, n => ToDto(n, authorName), ct);
+        if (conflict is not null)
+        {
+            return conflict;
+        }
+
+        await realtime.PublishAsync(
+            RealtimeKinds.Note, RealtimeActions.Deleted, projectId, noteId, null, note.Visibility == NoteVisibility.Internal, ct);
+        return Results.NoContent();
     }
 
     /// <summary>A client cannot tell an internal note from a missing one.</summary>
