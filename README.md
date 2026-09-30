@@ -53,6 +53,16 @@ Prerequisites: .NET 10 SDK, Node.js 22+, git, and SQL Server running on `localho
 ./scripts/migrate.ps1   # applies database migrations (production never migrates automatically)
 ```
 
+### Running from Visual Studio
+
+Needs Visual Studio 2026 (or 2022 17.14+, for `.slnx` and .NET 10) and SQL Server on `localhost`.
+
+1. Open `backend/Portal.slnx`, set **Portal.Api** as the startup project, and press F5 (profile `http`, `http://localhost:5080`). It uses the connection string in `appsettings.Development.json` (`PortalDev` on `localhost`, Windows sign-in) and creates or updates the database on start-up.
+2. Visual Studio does not start the frontend. In a terminal: `cd frontend`, `npm ci` (first time), `npm run dev`, then open <http://localhost:5173>. It proxies `/api` and `/hubs` to port 5080.
+3. To use another SQL Server, set the `ConnectionStrings__Default` environment variable (or a user-secrets value) instead of editing the file.
+
+"Deploy on Our Platform" also needs `Deploy__BaseDomain` and, on Windows, `Deploy__Sandbox=local-unsafe` (development only); everything else works without them.
+
 Running on your own server: see [`deploy/README.md`](deploy/README.md).
 
 ### Tests
