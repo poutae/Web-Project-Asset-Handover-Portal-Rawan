@@ -52,6 +52,7 @@ public sealed class PortalApiFactory : WebApplicationFactory<Program>
             services.AddHttpClient(Portal.Infrastructure.Deployments.StaticSiteDeploymentProvider.HealthClientName)
                 .ConfigurePrimaryHttpMessageHandler(() => Server.CreateHandler()));
         builder.UseSetting("Storage:MaxUploadBytes", UploadLimitBytes.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        builder.UseSetting("Cleanup:Enabled", "false"); // tests run the cleanup pass themselves, at a time they choose
         builder.UseSetting("RateLimit:AuthPerMinute", "100000");
         builder.UseSetting("Logging:LogLevel:Default", "Warning");
         builder.UseSetting("Logging:LogLevel:Microsoft.EntityFrameworkCore", "Warning");

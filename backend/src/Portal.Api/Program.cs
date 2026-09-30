@@ -12,6 +12,7 @@ using Portal.Api;
 using Portal.Api.Concurrency;
 using Portal.Api.Deployments;
 using Portal.Api.Endpoints;
+using Portal.Api.Maintenance;
 using Portal.Api.Projects;
 using Portal.Api.Realtime;
 using Portal.Api.Security;
@@ -64,6 +65,9 @@ builder.Services.AddScoped<DeploymentPipeline>();
 builder.Services.AddScoped<DeploymentContext>();
 builder.Services.AddSingleton<JobSignal>();
 builder.Services.AddHostedService<DeploymentWorker>();
+builder.Services.Configure<CleanupOptions>(builder.Configuration.GetSection(CleanupOptions.SectionName));
+builder.Services.AddSingleton<CleanupRunner>();
+builder.Services.AddHostedService<CleanupWorker>();
 
 builder.Services.AddSingleton<IFileStorage>(serviceProvider =>
 {

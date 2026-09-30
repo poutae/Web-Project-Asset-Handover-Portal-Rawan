@@ -95,4 +95,54 @@ public sealed class LocalFileStorageTests : IDisposable
         public override void SetLength(long value) => throw new NotSupportedException();
         public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
     }
+
+    [Fact]
+    public async Task Lists_only_finished_files_with_their_modification_time()
+    {
+        var key = LocalFileStorage.NewKey();
+        await _storage.SaveAsync(key, new MemoryStream(new byte[100]), maxBytes: 1_000, Ct);
+        var shard = Path.Combine(_root, key[..2]);
+        File.WriteAllText(Path.Combine(shard, $"{key}.{Guid.NewGuid():N}.tmp"), "half written");
+        File.WriteAllText(Path.Combine(_root, "notes.txt"), "not ours");
+        Directory.CreateDirectory(Path.Combine(_root, "deploy"));
+        File.WriteAllText(Path.Combine(_root, "deploy", new string('a', 32)), "someone else's file");
+        var stamp = new DateTime(2020, 1, 2, 3, 4, 5, DateTimeKind.Utc);
+        File.SetLastWriteTimeUtc(Path.Combine(shard, key), stamp);
+
+        var listed = new List<StoredObject>();
+        await foreach (var file in _storage.ListAsync(Ct))
+        {
+            listed.Add(file);
+        }
+
+        var only = Assert.Single(listed);
+        Assert.Equal(key, only.Key);
+        Assert.Equal(new DateTimeOffset(stamp), only.LastModified);
+    }
+
+    [Fact]
+    public async Task Removes_only_old_half_written_uploads()
+    {
+        var key = LocalFileStorage.NewKey();
+        await _storage.SaveAsync(key, new MemoryStream(new byte[100]), maxBytes: 1_000, Ct);
+        var shard = Path.Combine(_root, key[..2]);
+        var old = Path.Combine(shard, $"{key}.{Guid.NewGuid():N}.tmp");
+        var recent = Path.Combine(shard, $"{key}.{Guid.NewGuid():N}.tmp");
+        var stranger = Path.Combine(shard, "something-else.tmp");
+        foreach (var path in new[] { old, recent, stranger })
+        {
+            File.WriteAllText(path, "x");
+        }
+
+        File.SetLastWriteTimeUtc(old, DateTime.UtcNow.AddDays(-3));
+        File.SetLastWriteTimeUtc(stranger, DateTime.UtcNow.AddDays(-3));
+
+        var removed = await _storage.DeleteAbandonedUploadsAsync(DateTimeOffset.UtcNow.AddDays(-1), Ct);
+
+        Assert.Equal(1, removed);
+        Assert.False(File.Exists(old));
+        Assert.True(File.Exists(recent));
+        Assert.True(File.Exists(stranger));
+        Assert.True(File.Exists(Path.Combine(shard, key)));
+    }
 }

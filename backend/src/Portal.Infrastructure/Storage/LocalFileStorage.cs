@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 
 namespace Portal.Infrastructure.Storage;
@@ -65,6 +66,55 @@ public sealed class LocalFileStorage : IFileStorage
         TryDelete(PathFor(key));
         return Task.CompletedTask;
     }
+
+    public async IAsyncEnumerable<StoredObject> ListAsync([EnumeratorCancellation] CancellationToken ct)
+    {
+        await Task.Yield();
+        foreach (var shard in ShardDirectories())
+        {
+            ct.ThrowIfCancellationRequested();
+            foreach (var file in Directory.EnumerateFiles(shard))
+            {
+                var name = Path.GetFileName(file);
+                if (IsKey(name) && name.StartsWith(Path.GetFileName(shard), StringComparison.Ordinal))
+                {
+                    yield return new StoredObject(name, new DateTimeOffset(File.GetLastWriteTimeUtc(file), TimeSpan.Zero));
+                }
+            }
+        }
+    }
+
+    public async Task<int> DeleteAbandonedUploadsAsync(DateTimeOffset olderThan, CancellationToken ct)
+    {
+        await Task.Yield();
+        var removed = 0;
+        foreach (var shard in ShardDirectories())
+        {
+            ct.ThrowIfCancellationRequested();
+            foreach (var file in Directory.EnumerateFiles(shard, "*.tmp"))
+            {
+                var name = Path.GetFileName(file);
+                var isUploadTemp = name.Length == 32 + 1 + 32 + 4 && IsKey(name[..32]) && name[32] == '.' && IsKey(name.Substring(33, 32));
+                if (isUploadTemp && File.GetLastWriteTimeUtc(file) < olderThan.UtcDateTime)
+                {
+                    TryDelete(file);
+                    if (!File.Exists(file))
+                    {
+                        removed++;
+                    }
+                }
+            }
+        }
+
+        return removed;
+    }
+
+    /// <summary>Only the two-character shard folders; anything else under the root is not ours to touch.</summary>
+    private IEnumerable<string> ShardDirectories() =>
+        Directory.EnumerateDirectories(_root)
+            .Where(directory => Path.GetFileName(directory) is { Length: 2 } name && name.All(char.IsAsciiHexDigitLower));
+
+    private static bool IsKey(string value) => value.Length == 32 && value.All(char.IsAsciiHexDigitLower);
 
     private string PathFor(string key)
     {
