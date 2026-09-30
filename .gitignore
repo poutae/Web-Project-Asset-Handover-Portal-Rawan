@@ -1,0 +1,43 @@
+# Secrets / local configuration
+.env
+.env.*
+!.env.example
+*.pfx
+*.key
+appsettings.Local.json
+secrets.json
+
+# .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+TestResults/
+*.log
+publish/
+
+# Node / frontend
+node_modules/
+dist/
+coverage/
+.vite/
+*.tsbuildinfo
+
+# Playwright
+playwright-report/
+test-results/
+blob-report/
+playwright/.cache/
+
+# Local storage for uploads / build workspaces
+storage/
+uploads/
+workspaces/
+
+# IDE / OS
+.idea/
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
+Thumbs.db
