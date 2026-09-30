@@ -14,6 +14,8 @@ public sealed class PortalApiFactory : WebApplicationFactory<Program>
     /// <summary>Small on purpose so the size-limit tests do not have to build a huge file.</summary>
     public const long UploadLimitBytes = 64 * 1024;
 
+    public const string SiteDomain = "sites.test";
+
     private const string ConnectionVariable = "PORTAL_TEST_CONNECTION";
     private const string DefaultServer = "Server=localhost;Integrated Security=true;TrustServerCertificate=true";
 
@@ -35,6 +37,20 @@ public sealed class PortalApiFactory : WebApplicationFactory<Program>
         builder.UseSetting("ConnectionStrings:Default", DatabaseConnection);
         builder.UseSetting("Database:MigrateOnStartup", "true");
         builder.UseSetting("Storage:Root", _storageRoot);
+
+        // "Deploy on Our Platform": a real worker, real git and node builds, and sites served by the API itself.
+        // Only the sandbox is the unisolated local one, and health checks go through this test server.
+        builder.UseSetting("Deploy:Root", Path.Combine(_storageRoot, "deploy"));
+        builder.UseSetting("Deploy:BaseDomain", SiteDomain);
+        builder.UseSetting("Deploy:PublicScheme", "http");
+        builder.UseSetting("Deploy:Sandbox", "local-unsafe");
+        builder.UseSetting("Deploy:AllowLocalRepositories", "true");
+        builder.UseSetting("Deploy:HealthCheckAttempts", "2");
+        builder.UseSetting("Deploy:BuildTimeoutSeconds", "120");
+        builder.UseSetting("DataProtection:KeysPath", Path.Combine(_storageRoot, "keys"));
+        builder.ConfigureServices(services =>
+            services.AddHttpClient(Portal.Infrastructure.Deployments.StaticSiteDeploymentProvider.HealthClientName)
+                .ConfigurePrimaryHttpMessageHandler(() => Server.CreateHandler()));
         builder.UseSetting("Storage:MaxUploadBytes", UploadLimitBytes.ToString(System.Globalization.CultureInfo.InvariantCulture));
         builder.UseSetting("RateLimit:AuthPerMinute", "100000");
         builder.UseSetting("Logging:LogLevel:Default", "Warning");

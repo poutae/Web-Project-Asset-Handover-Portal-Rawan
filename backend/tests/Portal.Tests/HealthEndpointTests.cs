@@ -13,6 +13,7 @@ public sealed class HealthEndpointTests(WebApplicationFactory<Program> factory)
         using var app = factory.WithWebHostBuilder(builder =>
         {
             builder.UseSetting("Database:MigrateOnStartup", "false");
+            builder.UseSetting("Deploy:WorkerEnabled", "false");
             builder.UseSetting("ConnectionStrings:Default", "Server=unreachable;Database=none");
         });
         using var client = app.CreateClient();
