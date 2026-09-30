@@ -133,6 +133,27 @@ if (app.Configuration.GetValue<bool>("Database:MigrateOnStartup"))
 
 app.UseForwardedHeaders();
 app.UseExceptionHandler();
+// Serve the built frontend (and its service worker) from the API when Frontend:DistPath is configured,
+// so the whole portal is a single deployable. Static files must be served BEFORE routing: once routing
+// has matched an endpoint (including the SPA fallback below) the static file middleware steps aside.
+var frontendFiles = app.Configuration["Frontend:DistPath"] is { Length: > 0 } distPath && Directory.Exists(distPath)
+    ? new PhysicalFileProvider(Path.GetFullPath(distPath))
+    : null;
+if (frontendFiles is not null)
+{
+    static void CacheHeaders(StaticFileResponseContext context)
+    {
+        var name = context.File.Name;
+        context.Context.Response.Headers.CacheControl = name is "index.html" or "sw.js"
+            ? "no-cache"
+            : "public, max-age=31536000, immutable";
+    }
+
+    app.UseDefaultFiles(new DefaultFilesOptions { FileProvider = frontendFiles });
+    app.UseStaticFiles(new StaticFileOptions { FileProvider = frontendFiles, OnPrepareResponse = CacheHeaders });
+}
+
+app.UseRouting();
 app.UseMiddleware<SecurityHeadersMiddleware>();
 app.UseMiddleware<OriginCheckMiddleware>();
 app.UseRateLimiter();
@@ -155,27 +176,14 @@ app.MapNoteEndpoints();
 app.MapDocumentEndpoints();
 app.MapHub<PortalHub>(PortalHub.Path);
 
-// Serve the built frontend (and its service worker) from the API when Frontend:DistPath is configured,
-// so the whole portal is a single deployable. Unknown /api and /hubs paths still 404 instead of
-// falling back to the SPA shell.
-if (app.Configuration["Frontend:DistPath"] is { Length: > 0 } distPath && Directory.Exists(distPath))
+// Unknown /api, /hubs, and /assets paths stay 404 instead of falling back to the SPA shell.
+if (frontendFiles is not null)
 {
-    var files = new PhysicalFileProvider(Path.GetFullPath(distPath));
-    static void NoCacheShell(StaticFileResponseContext context)
-    {
-        var name = context.File.Name;
-        context.Context.Response.Headers.CacheControl = name is "index.html" or "sw.js"
-            ? "no-cache"
-            : "public, max-age=31536000, immutable";
-    }
-
-    app.UseDefaultFiles(new DefaultFilesOptions { FileProvider = files });
-    app.UseStaticFiles(new StaticFileOptions { FileProvider = files, OnPrepareResponse = NoCacheShell });
-    app.MapFallback("{*path:regex(^(?!api/|hubs/).*$)}", async context =>
+    app.MapFallback("{*path:regex(^(?!api/|hubs/|assets/).*$)}", async context =>
     {
         context.Response.Headers.CacheControl = "no-cache";
         context.Response.ContentType = "text/html; charset=utf-8";
-        await context.Response.SendFileAsync(files.GetFileInfo("index.html"));
+        await context.Response.SendFileAsync(frontendFiles.GetFileInfo("index.html"));
     });
 }
 
